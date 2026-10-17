@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fcf7f7">
+  <title>우리의 결혼 준비</title>
+  <link rel="stylesheet" href="./fonts.css">
+  <link rel="stylesheet" href="./app.css">
+  <script src="./model.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 바로가기</a>
+  <header class="app-header">
+    <div class="header-inner">
+      <a class="app-logo" href="#timeline" aria-label="우리의 결혼 준비 타임라인"><span class="logo-flower" aria-hidden="true">✳</span><span><strong>우리의 결혼 준비</strong><small>OUR LITTLE BEGINNING</small></span></a>
+      <nav class="desktop-nav" data-navigation aria-label="주요 화면"></nav>
+      <div class="header-actions"><span class="header-day"><small>2027.09.25 · 14:00</small></span><div class="couple-chip"><span class="avatar">성</span><span class="avatar partner">지</span><span>오성현 &amp; 정지윤<small>신랑 &amp; 신부 · 함께 준비하는 공간</small></span></div><button type="button" class="icon-button" id="notification-button" aria-label="알림 안내"></button></div>
+    </div>
+  </header>
+  <div class="demo-strip"><span><i aria-hidden="true"></i>로컬 체험 · 준비 데이터 예시</span><span id="storage-status">기록은 이 브라우저에만 저장돼요</span><a href="./studio.html" target="_blank" rel="noopener">PC · iPhone 비교 ↗</a></div>
+  <main id="main" tabindex="-1"></main>
+  <footer class="app-footer"><span>작은 결정들이 모여, 우리다운 하루로.</span><span id="wedding-footer">2027.09.25 14:00 · 공동 동의·동기화·푸시는 연결 전</span></footer>
+  <nav class="mobile-nav" data-navigation aria-label="모바일 주요 화면"></nav>
+  <dialog id="detail-dialog" aria-labelledby="dialog-title"><button type="button" class="icon-button dialog-close" data-close-dialog aria-label="닫기">×</button><div id="dialog-content"></div></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

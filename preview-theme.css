@@ -1,0 +1,89 @@
+/* Selected timeline A and budget B. Typography and colors shared by every palette. */
+:root { color: var(--ink); background: var(--canvas); font-family: var(--font-ui); }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline-color: var(--accent); }
+.sidebar { background: var(--sidebar); border-color: var(--line); }
+.app-brand { font-weight: 650; }
+.brand-mark { color: var(--accent); font-style: normal; font-weight: 400; }
+.app-brand small, .sidebar .app-brand small { color: var(--muted); font-size: 8px; letter-spacing: .8px; }
+.couple { border-color: var(--line); }
+.avatar { background: var(--accent-soft); color: var(--accent); border-color: var(--sidebar); }
+.avatar.partner, .mini-avatars>span { background: var(--partner); color: var(--ink); }
+.mini-avatars { background: var(--accent-soft); color: var(--accent); }
+.mini-avatars>span { border-color: var(--canvas); }
+.sidebar nav button.nav-active { color: var(--accent); background: var(--accent-soft); }
+.sidebar-note .tiny-flower { color: var(--accent-line); }
+.sidebar-note small { color: var(--muted); }
+.online-dot { background: var(--accent); }
+.app-topbar, .event-list, .event-row, .budget-table th, .budget-table td { border-color: var(--line); }
+.app-topbar i { color: var(--accent-line); }
+.page-eyebrow { color: var(--accent); font-style: normal; font-weight: 450; font-size: 12px; letter-spacing: .5px; margin-bottom: 12px; }
+.page-title { color: var(--ink); font-weight: 600; letter-spacing: -1px; }
+.wedding-date strong { color: var(--accent); font-weight: 500; }
+.wedding-date strong span { color: var(--muted); }
+.section-head h2 { color: var(--ink); font-weight: 600; }
+.card { background: var(--surface); border-color: var(--line); border-radius: 12px; }
+.page-subtitle,.app-topbar,.topbar-right,.wedding-date,.section-head p,.milestone-item small,.milestone-month,.milestone-note,.event-info small,.date-block small,.unscheduled,.unscheduled small,.sidebar-bottom,.couple small,.sidebar nav button,.sidebar-note p,.simple-quote p,.simple-quote small { color: var(--muted); }
+.pill { border-radius: 5px; line-height: 1.3; }
+.pill.sage { background: var(--soft); color: var(--accent); }
+.pill.rose { background: var(--warning-bg); color: var(--warning); }
+.pill.gray { background: var(--neutral); color: var(--neutral-ink); }
+.event-row:hover { background: var(--soft); }
+.event-info strong { color: var(--ink); }
+.event-row .arrow { color: var(--accent); }
+.date-block strong { color: var(--accent); font-weight: 500; }
+.unscheduled { border-color: var(--line); background: var(--surface); }
+.unscheduled>span { color: var(--accent); }
+.mobile-timeline-toggle { background: var(--soft); border-color: var(--line); color: var(--accent); min-height: 44px; }
+.milestone-card { padding-top: 25px; }
+.milestone-scroll { scrollbar-color: var(--accent-line) transparent; }
+.milestone-track:before { background: var(--line); }
+.milestone-item { color: var(--ink); }
+.milestone-item .milestone-month { color: var(--muted); font-variant-numeric: tabular-nums; }
+.milestone-symbol { color: var(--accent); background: var(--surface); border-color: var(--line); }
+.milestone-item.done .milestone-symbol { background: var(--accent); border-color: var(--accent); color: white; }
+.milestone-item.current .milestone-symbol { background: var(--accent-soft); border-color: var(--accent-line); box-shadow: 0 0 0 4px var(--canvas); }
+.milestone-item strong { font-weight: 550; }
+.simple-quote { background: var(--soft); }
+.simple-quote span { color: var(--accent-line); font-style: normal; }
+.simple-quote small { font-size: 9px; letter-spacing: 1px; }
+.goal-badge { background: var(--soft); color: var(--accent); }
+.budget-top>div>small,.budget-target,.budget-status .status-caption,.budget-status>small,.legend-row .legend-name,.legend-row small,.legend-row strong span,.budget-caption,.budget-table th,.budget-table-note,.budget-table .paid-cell,.axis-zero,.axis-end { color: var(--muted); }
+.budget-total { color: var(--ink); font-weight: 550; font-variant-numeric: tabular-nums; }
+.budget-status strong,.legend-row strong,.budget-caption strong { color: var(--accent); }
+.budget-status.over strong,.budget-status.over>small,.budget-caption.over strong { color: var(--danger); }
+.budget-caption.over { background: var(--danger-bg); padding: 12px; border: 0; border-radius: 6px; }
+.budget-table td,.budget-table td:first-child { color: var(--ink); }
+.budget-table .category-dot { background: var(--accent-line); }
+.budget-caption { border-color: var(--line); }
+.stack-track { background: var(--soft); border-radius: 7px; }
+.stack-segment { font-weight: 550; font-variant-numeric: tabular-nums; }
+.stack-segment.paid { color: var(--on-paid); }
+.stack-segment.committed { color: var(--on-committed); }
+.stack-segment.estimated { color: var(--on-estimated); }
+.target-marker { border-color: var(--accent); }
+.target-marker span { color: var(--accent); }
+.mobile-nav { background: var(--surface); border-color: var(--line); }
+.mobile-nav button { color: var(--muted); }
+.mobile-nav button.nav-active { color: var(--accent); background: var(--soft); }
+dialog { color: var(--ink); background: var(--surface); border-color: var(--line); }
+dialog::backdrop { background: #302a2940; }
+.dialog-eyebrow,.dialog-date,.dialog-description,.dialog-attributes>div,.dialog-note,.dialog-footer,.close-dialog { color: var(--muted); }
+.dialog-attributes { border-color: var(--line); }
+.dialog-attributes strong { color: var(--accent); }
+.dialog-note { background: var(--soft); }
+@media(min-width:601px) {
+  .milestone-card { margin-top: 31px; }
+  .page-title { font-size: 28px; }
+  .budget-total { font-size: 38px; }
+  .page-subtitle { font-size: 13px; }
+  .simple-quote p { font-size: 15px; }
+  .event-info strong { font-size: 14px; }
+}
+@media(max-width:600px) {
+  .page-eyebrow { font-size: 11px; }
+  .page-title { font-size: 23px; }
+  .budget-total { font-size: 31px; }
+  .budget-table td,.budget-table td:first-child { font-size: 13px; }
+  .budget-table th { font-size: 11px; }
+  .mobile-nav button { min-height: 48px; }
+}

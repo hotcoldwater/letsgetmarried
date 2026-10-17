@@ -1,0 +1,30 @@
+{
+  "name": "letsgetmarried",
+  "version": "0.2.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "next dev --hostname localhost",
+    "build": "next build",
+    "deploy:build": "node scripts/doctor.mjs && node scripts/migrate.mjs && next build",
+    "start": "next start --hostname localhost",
+    "setup:local": "node scripts/setup-local.mjs",
+    "doctor": "node --env-file-if-exists=.env.local scripts/doctor.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
+    "test": "node scripts/check-model.js && node scripts/check-wedding.js && node scripts/check-domain.mjs && node scripts/check-auth.mjs",
+    "test:db": "node --env-file=.env.local scripts/check-db.mjs",
+    "notify:run": "node --env-file=.env.local scripts/run-reminders.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/s3-request-presigner": "^3.0.0",
+    "@neondatabase/serverless": "^1.0.0",
+    "next": "^16.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "server-only": "^0.0.1",
+    "web-push": "^3.6.7"
+  }
+}

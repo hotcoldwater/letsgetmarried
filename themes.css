@@ -1,0 +1,85 @@
+/* The same layout and data use these tokens in all four wedding palettes. */
+:root, [data-theme="champagne"] {
+  --canvas: #fbf8f2;
+  --surface: #fffdf9;
+  --sidebar: #f3ede3;
+  --soft: #f1e9dc;
+  --line: #e1d7c7;
+  --ink: #3d332b;
+  --muted: #766755;
+  --accent: #756047;
+  --accent-soft: #e9ddc9;
+  --accent-line: #b29b78;
+  --paid: #756047;
+  --committed: #c7b392;
+  --estimated: #f0e2c7;
+  --on-paid: #ffffff;
+  --on-committed: #3e3426;
+  --on-estimated: #5f4f37;
+  --partner: #e6d5cc;
+}
+[data-theme="rose"] {
+  --canvas: #fcf7f7;
+  --surface: #fffafb;
+  --sidebar: #f4e8eb;
+  --soft: #f5e6eb;
+  --line: #e7d3db;
+  --ink: #4b303b;
+  --muted: #856270;
+  --accent: #945d72;
+  --accent-soft: #edd4de;
+  --accent-line: #bc8da0;
+  --paid: #945d72;
+  --committed: #d7a8b9;
+  --estimated: #f1dce5;
+  --on-paid: #ffffff;
+  --on-committed: #522e3d;
+  --on-estimated: #704456;
+  --partner: #eadbc9;
+}
+[data-theme="sage"] {
+  --canvas: #f8faf4;
+  --surface: #fdfef8;
+  --sidebar: #edf1e6;
+  --soft: #eaf0e1;
+  --line: #d8e1ce;
+  --ink: #304333;
+  --muted: #65765a;
+  --accent: #527351;
+  --accent-soft: #dbe6d1;
+  --accent-line: #94aa80;
+  --paid: #527351;
+  --committed: #afc49d;
+  --estimated: #e5e8cc;
+  --on-paid: #ffffff;
+  --on-committed: #304b2b;
+  --on-estimated: #535e36;
+  --partner: #e9ddc8;
+}
+[data-theme="blue"] {
+  --canvas: #f6f9fc;
+  --surface: #fcfdff;
+  --sidebar: #eaf0f7;
+  --soft: #e8eff8;
+  --line: #d4dfec;
+  --ink: #2d3e56;
+  --muted: #5d718d;
+  --accent: #55749d;
+  --accent-soft: #d9e5f3;
+  --accent-line: #92abc9;
+  --paid: #55749d;
+  --committed: #afc6e2;
+  --estimated: #e1e7f4;
+  --on-paid: #ffffff;
+  --on-committed: #304762;
+  --on-estimated: #455776;
+  --partner: #e6deed;
+}
+:root {
+  --warning: #94502d;
+  --warning-bg: #f9ebdb;
+  --danger: #a63c3b;
+  --danger-bg: #fcecea;
+  --neutral: #f0eeea;
+  --neutral-ink: #736d64;
+}

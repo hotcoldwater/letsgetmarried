@@ -1,0 +1,15 @@
+{
+  "id": "/",
+  "name": "성현과 지윤의 결혼 준비",
+  "short_name": "우리의 결혼 준비",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fcf7f7",
+  "theme_color": "#945d72",
+  "icons": [
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}

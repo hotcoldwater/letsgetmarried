@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko" data-theme="rose">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>우리의 결혼 준비 · 화면 시안</title>
+  <link rel="stylesheet" href="./fonts.css">
+  <link rel="stylesheet" href="./preview.css">
+  <link rel="stylesheet" href="./themes.css">
+  <link rel="stylesheet" href="./preview-theme.css">
+  <script src="./preview.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="app-brand"><span class="brand-mark" aria-hidden="true">&</span><span>우리의 결혼 준비<small>OUR LITTLE BEGINNING</small></span></div>
+      <div class="couple"><span class="avatar">나</span><span class="avatar partner">짝</span><div>함께 준비하는 우리<small>2027. 04. 17 · 예시 결혼식</small></div></div>
+      <nav aria-label="주요 화면"><button data-nav="timeline" class="nav-active"><span aria-hidden="true">◷</span>우리의 타임라인</button><button data-nav="budget"><span aria-hidden="true">◒</span>함께 쓰는 예산</button></nav>
+      <div class="sidebar-note"><span class="tiny-flower" aria-hidden="true">✳</span><p>하나씩 정하다 보면,<br>어느새 우리의 날.</p><small>ONE STEP AT A TIME</small></div>
+      <div class="sidebar-bottom"><span class="online-dot"></span>우리 둘만의 공간<span>♡</span></div>
+    </aside>
+    <div class="app-main">
+      <header class="app-topbar"><span id="breadcrumb">우리의 공간 <i>/</i> 타임라인</span><span class="topbar-right">예시 화면 <span class="mini-avatars">나<span>짝</span></span></span></header>
+      <main id="app-content"></main>
+      <nav class="mobile-nav" aria-label="모바일 주요 화면"><button data-nav="timeline"><span aria-hidden="true">◷</span>타임라인</button><button data-nav="budget"><span aria-hidden="true">◒</span>예산</button></nav>
+    </div>
+  </div>
+  <dialog id="event-dialog" aria-labelledby="event-dialog-title"><button class="close-dialog" type="button" aria-label="일정 상세 닫기">×</button><div id="event-dialog-content"></div></dialog>
+</body>
+</html>

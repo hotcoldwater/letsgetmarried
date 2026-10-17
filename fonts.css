@@ -1,0 +1,9 @@
+@font-face {
+  font-family: "Pretendard";
+  src: url("./assets/fonts/PretendardVariable.ttf") format("truetype");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+:root { --font-ui: "Pretendard", sans-serif; }
+html, body, button, input, select, textarea, svg text { font-family: var(--font-ui); }

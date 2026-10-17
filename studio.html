@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>로즈 블러시 · PC와 iPhone 미리보기</title>
+  <link rel="stylesheet" href="./fonts.css">
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f2e8ec;color:#4b303b;font-family:var(--font-ui)}button{font:inherit;cursor:pointer;border:0}button:focus-visible,a:focus-visible{outline:3px solid #79455a;outline-offset:3px}header{padding:20px 30px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;background:#fcf7f7;border-bottom:1px solid #dec6d2;position:sticky;top:0;z-index:2}header>div:first-child{margin-right:auto}h1{font-size:18px;font-weight:600;margin:0 0 6px}p{margin:0;font-size:11px;color:#785e6a;line-height:1.7}.switch{display:flex;gap:4px;background:#f0dfe7;padding:4px;border-radius:8px}.switch button{min-height:38px;padding:8px 15px;border-radius:5px;background:none;font-size:12px;color:#79455a}.switch button[aria-pressed=true]{background:#fff;box-shadow:0 2px 5px #79455a13;font-weight:600}header a{font-size:11px;color:#785e6a}.stage{padding:26px;overflow:auto}.frame{width:100%;max-width:1440px;min-width:1050px;margin:auto;border:1px solid #d4bac7;border-radius:12px;overflow:hidden;box-shadow:0 10px 40px #79455a12;background:white}iframe{border:0;display:block;width:100%;height:calc(100vh - 155px);min-height:700px}.stage.phone .frame{width:407px;min-width:0;max-width:none;border:7px solid #4d3942;border-radius:30px}.stage.phone.compact .frame{width:389px}.stage.phone iframe{height:810px;min-height:0}.stage.phone{min-width:459px}footer{padding:0 28px 24px;text-align:center;font-size:11px;color:#785e6a;line-height:1.8}@media(max-width:600px){header{padding:16px;gap:12px}header>div:first-child{width:100%}.switch button{padding:8px 10px}.stage{padding:18px}.stage.phone{min-width:0}.stage.phone .frame{width:100%;max-width:407px;border-width:5px}h1{font-size:17px}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+  </style>
+  <script src="./studio.js" defer></script>
+</head>
+<body>
+<header><div><h1>로즈 블러시 · Stitch 통합 시안</h1><p>타임라인 A · 예산 B · Pretendard · 예식 정보 반영 · 준비 일정과 지출은 예시</p></div><div class="switch" role="group" aria-label="화면 크기"><button type="button" data-device="desktop" aria-pressed="true">PC</button><button type="button" data-device="phone" aria-pressed="false">iPhone · 393</button><button type="button" data-device="compact" aria-pressed="false">작은 화면 · 375</button></div><div class="switch" role="group" aria-label="미리볼 화면"><button type="button" data-preview-view="timeline" aria-pressed="true">타임라인</button><button type="button" data-preview-view="budget" aria-pressed="false">예산</button></div><a href="./index.html" target="_blank" rel="noopener">통합 화면 열기 ↗</a><a href="./design-review.html" target="_blank" rel="noopener">이전 색감 비교 ↗</a></header>
+<div class="stage" id="stage"><div class="frame"><iframe id="app-frame" title="결혼 준비 반응형 웹앱 미리보기" src="./index.html#timeline"></iframe></div></div>
+<footer>크기 전환은 브라우저 미리보기입니다. 실제 아이폰 및 웹 푸시 검증은 이후 진행합니다.</footer>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko" data-theme="champagne">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f5ef">
+  <title>우리의 결혼 준비 · 디자인 비교</title>
+  <link rel="stylesheet" href="./fonts.css">
+  <link rel="stylesheet" href="./themes.css">
+  <link rel="stylesheet" href="./review.css">
+  <script src="./design-brief.js" defer></script>
+  <script src="./review.js" defer></script>
+</head>
+<body>
+  <header class="review-header">
+    <a class="brand" href="./index.html"><span class="rings" aria-hidden="true"></span><span>우리의 결혼 준비<small>LET’S GET MARRIED</small></span></a>
+    <span class="study-tag"><i></i> DESIGN STUDY 02</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">A LITTLE PLANNING, A LOT OF LOVE.</p>
+      <h1>우리의 시작을,<br class="small-only"> 로즈 블러시로.</h1>
+      <p class="intro-copy">부드러운 블러시와 차분한 로즈로 정한 우리만의 분위기.<br>확정한 디자인을 PC와 아이폰 크기로 살펴보세요.</p>
+      <div class="agreed-design"><span>✓ 타임라인 A · 한 줄의 여정</span><span>✓ 예산 B · 누적 예산 바</span><span>Aa · Pretendard</span><span>✓ 로즈 블러시 확정</span></div>
+      <div class="intro-note">디자인 확인용 · 일정과 금액은 가상의 예시입니다.</div>
+    </section>
+    <section class="review-workspace" aria-label="디자인 후보 비교">
+      <div class="review-toolbar">
+        <div class="view-tabs" role="group" aria-label="비교할 기능">
+          <button type="button" data-view="timeline" aria-pressed="true"><span>01</span> 타임라인</button>
+          <button type="button" data-view="budget" aria-pressed="false"><span>02</span> 예산</button>
+        </div>
+        <div class="device-switch" role="group" aria-label="미리보기 화면 크기">
+          <button type="button" data-device="desktop" aria-pressed="true">PC</button>
+          <button type="button" data-device="mobile" aria-pressed="false">iPhone</button>
+        </div>
+      </div>
+      <div class="candidate-grid" id="candidates" role="group" aria-label="색감 비교 기록 · 확정 색감은 로즈 블러시"></div>
+      <div class="preview-heading">
+        <div><span class="candidate-kicker" id="candidate-kicker"></span><h2 id="preview-title"></h2></div>
+        <button class="choose-button selected" id="choose" type="button" disabled>✓ 확정한 색감</button>
+      </div>
+      <div class="preview-meta">
+        <p id="preview-description"></p>
+        <div class="scenario-switch" id="scenario-switch" role="group" aria-label="예산 예시 상황" hidden>
+          <span>예시 상황</span><button type="button" data-scenario="normal" aria-pressed="true">예산 이내</button><button type="button" data-scenario="over" aria-pressed="false">예산 초과</button>
+        </div>
+      </div>
+      <div class="preview-stage" id="preview-stage">
+        <div class="preview-window" id="preview-window">
+          <div class="window-chrome" aria-hidden="true"><span></span><span></span><span></span><p>우리의 결혼 준비</p><small id="viewport-label">DESKTOP PREVIEW</small></div>
+          <iframe id="preview" title="결혼 준비 웹사이트 디자인 미리보기" src="./preview.html?view=timeline&variant=A&theme=rose"></iframe>
+        </div>
+      </div>
+      <div class="review-details" id="review-details"></div>
+    </section>
+    <section class="selection-section" aria-label="현재 디자인 결정">
+      <div><p class="eyebrow">OUR DESIGN DIRECTION</p><h2>우리의 디자인이 정해졌어요.</h2><p>타임라인 A · 예산 B · Pretendard · 로즈 블러시.</p></div>
+      <div class="selection-values"><div><span>확정한 색감</span><strong id="chosen-theme">02 · 로즈 블러시 · 확정</strong></div></div>
+      <button id="copy-selection" class="copy-button" type="button">선택 내용 복사 ↗</button>
+      <p id="selection-feedback" role="status" aria-live="polite"></p>
+    </section>
+    <section class="prompt-section" aria-label="디자인 생성 도구용 프롬프트">
+      <div class="prompt-heading"><div><p class="eyebrow">FROM IDEA TO DESIGN</p><h2>디자인 도구에 그대로 전달해요.</h2><p>확정한 로즈 블러시와 A·B 구성을 담은 프롬프트예요. 다른 색감을 미리 보아도 복사 내용은 확정 디자인을 유지해요.</p></div><button id="copy-prompt" class="copy-button" type="button">확정 프롬프트 복사 ↗</button></div>
+      <details><summary>프롬프트 펼쳐 보기 · <span id="prompt-theme"></span></summary><label class="sr-only" for="design-prompt">디자인 요청 프롬프트</label><textarea id="design-prompt" readonly spellcheck="false"></textarea></details>
+      <div class="prompt-footer"><a href="./docs/design-prompts.md" target="_blank" rel="noopener">로즈 블러시 최종 디자인 요청 전체 보기 ↗</a><p id="prompt-feedback" role="status" aria-live="polite"></p></div>
+    </section>
+    <details class="scope-details"><summary>이번 시안에서 확인할 수 있는 것</summary><p>로즈 블러시를 최종 색감으로 반영했습니다. 이전 색감은 비교용으로 볼 수 있으며 확정 선택을 바꾸지는 않습니다. PC·iPhone 크기 비교, 예산 초과 상황, 일정 상세 보기, 모바일 전체 타임라인 펼치기를 확인할 수 있습니다. Pretendard를 로컬 파일로 사용합니다. 화면 크기 비교는 실제 아이폰 검증을 대신하지 않습니다. 실제 로그인·공동 동의·자료 업로드·푸시 알림은 이후 로컬 구현 범위입니다.</p></details>
+  </main>
+  <footer>Two people. One beautiful beginning.<span>로컬 디자인 확정 · v1.2</span></footer>
+</body>
+</html>
