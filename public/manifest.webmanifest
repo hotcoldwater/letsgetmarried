@@ -1,15 +1,32 @@
 {
   "id": "/",
-  "name": "성현과 지윤의 결혼 준비",
-  "short_name": "우리의 결혼 준비",
+  "name": "letsgetmarried",
+  "short_name": "letsgetmarried",
   "lang": "ko",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#fcf7f7",
-  "theme_color": "#945d72",
+  "theme_color": "#fcf7f7",
   "icons": [
-    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
-    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
-  ]
+    {
+      "src": "/icon-192.png?v=2",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png?v=2",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "description": "성현과 지윤, 두 사람의 결혼 준비"
 }

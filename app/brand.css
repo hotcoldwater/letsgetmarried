@@ -1,0 +1,73 @@
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: #79455a;
+}
+.brand-mark {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.brand .brand-wordmark {
+  display: block;
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -.9px;
+  white-space: nowrap;
+}
+.brand .brand-caption {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 450;
+  line-height: 1.4;
+  letter-spacing: .3px;
+  color: #827377;
+}
+.brand-welcome {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 19px;
+}
+.brand-welcome .brand-mark {
+  width: 72px;
+  height: 72px;
+  filter: drop-shadow(0 7px 12px #79455a18);
+}
+.brand-welcome .brand-wordmark {
+  font-size: 32px;
+  letter-spacing: -1.4px;
+}
+.setup-page .brand-welcome + h1 {
+  margin-top: 29px;
+}
+.live-app .app-logo {
+  border-radius: 10px;
+}
+.live-app .app-logo:focus-visible {
+  outline: 2px solid #79455a;
+  outline-offset: 5px;
+}
+@media (max-width: 1080px) {
+  .live-app .live-header-name { display: none; }
+}
+@media (max-width: 760px) {
+  .live-app .header-inner { gap: 8px; }
+  .live-app .brand { gap: 8px; }
+  .live-app .brand-mark { width: 32px; height: 32px; }
+  .live-app .brand .brand-wordmark { font-size: 17px; letter-spacing: -.7px; }
+  .live-app .header-actions { gap: 2px; }
+  .live-app .header-actions .text-button { padding-inline: 5px; }
+  .setup-page { margin: 7vh 16px !important; padding: 28px !important; }
+  .brand-welcome .brand-mark { width: 64px; height: 64px; }
+  .brand-welcome .brand-wordmark { font-size: 29px; }
+}
+@media (max-width: 360px) {
+  .live-app .header-inner { padding-inline: 12px; }
+  .live-app .brand { gap: 6px; }
+  .live-app .brand .brand-wordmark { font-size: 15px; }
+  .live-app .header-actions .text-button { font-size: 11px; }
+}

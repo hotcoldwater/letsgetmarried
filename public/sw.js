@@ -4,7 +4,8 @@ self.addEventListener('activate', event => event.waitUntil(self.clients.claim())
 self.addEventListener('push', event => {
   let data; try { data = event.data?.json(); } catch { data = null; }
   const url = new URL(data?.url || '/#notifications', self.location.origin);
-  event.waitUntil(self.registration.showNotification('우리의 결혼 준비', {
+  event.waitUntil(self.registration.showNotification('letsgetmarried', {
+    icon: '/icon-192.png?v=2',
     body: data?.body || '새 소식이 있어요.', tag: data?.tag || 'wedding-update',
     data: { url: url.origin === self.location.origin ? url.href : self.location.origin },
   }));

@@ -22,7 +22,7 @@ export async function POST(request) {
       const [sub] = await sql`SELECT id FROM wedding.push_subscriptions WHERE endpoint = ${subscription.endpoint} AND role = ${user.role}`;
       if (!sub) throw new DomainError('먼저 이 기기의 알림을 켜 주세요.');
       const id = 'test:' + sub.id + ':' + Math.floor(Date.now() / 60000);
-      const payload = JSON.stringify({ title: '우리의 결혼 준비', body: user.name + ' 님, 알림이 연결됐어요.', url: '/#notifications', tag: id });
+      const payload = JSON.stringify({ title: 'letsgetmarried', body: user.name + ' 님, 알림이 연결됐어요.', url: '/#notifications', tag: id });
       await sql`INSERT INTO wedding.push_jobs(id, subscription_id, payload) VALUES (${id}, ${sub.id}::uuid, ${payload}::jsonb) ON CONFLICT DO NOTHING`;
       const result = await dispatchPush(); return json({ message: result.sent ? '테스트 알림을 발송했어요.' : '알림이 대기 중이거나 이번 분에 이미 발송했어요.' });
     }
