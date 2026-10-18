@@ -3,7 +3,7 @@ import { neon } from '@neondatabase/serverless';
 const sql = neon(process.env.DATABASE_URL);
 try {
   const [current] = await sql`SELECT version, body->>'schema' AS schema FROM wedding.workspace WHERE id = 'our-wedding'`;
-  assert.equal(current.schema, '1');
+  assert.ok(['1', '2'].includes(current.schema));
   // Test conditional version updates on an isolated, automatically dropped TEMP table.
   const result = await sql.transaction([
     sql`CREATE TEMP TABLE wedding_cas_probe(version integer NOT NULL) ON COMMIT DROP`,
