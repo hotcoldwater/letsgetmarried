@@ -1,5 +1,5 @@
 import { checklistTemplates, decisionTemplates } from '../lib/planning-templates.mjs';
-import { expenseStatus } from '../lib/domain.mjs';
+import { expenseStatus, decisionBranch, decisionPath } from '../lib/domain.mjs';
 export const decisionLabels = { todo: '미정', doing: '진행 중', done: '완료' };
 export const expenseLabels = { estimated: '예상', confirmed: '확정', paid: '지급 완료' };
 export function Field({ label, name, value = '', type = 'text', ...props }) {
@@ -22,6 +22,7 @@ export default function PlannerFields({ modal, state }) {
   </>;
   if (modal.type === 'decision.save') return <>
     <Field label="결정할 것" name="title" value={r.title} required maxLength={200} autoFocus placeholder="예: 스튜디오 업체 정하기" />
+    <label>상위 결정<select name="parentId" defaultValue={r.parentId || ''}><option value="">없음 · 최상위 결정</option>{state.decisions.filter(d => (!d.archived || d.id === r.parentId) && !decisionBranch(state, r.id).some(child => child.id === d.id)).map(d => <option key={d.id} value={d.id}>{decisionPath(state, d.id).map(p => p.title).join(' / ')}</option>)}</select></label>
     <div className="simple-fields"><label>상태<select name="status" defaultValue={r.status || 'todo'}>{Object.entries(decisionLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>분류<select name="itemId" defaultValue={r.itemId || ''}>{groups}</select></label></div>
     <Memo label="정한 내용" name="result" value={r.result} maxLength={2000} />
     <details className="simple-more"><summary>참고 메모</summary><Memo label="확인할 내용" name="memo" value={r.memo} /></details>
