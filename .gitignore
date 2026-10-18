@@ -13,3 +13,6 @@ coverage/
 playwright-report/
 test-results/
 
+
+# User-supplied benchmark files may contain personal financial and guest data.
+references/

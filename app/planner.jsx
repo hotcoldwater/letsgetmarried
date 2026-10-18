@@ -1,149 +1,200 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Brand from './brand';
 import LoginForm from './login-form';
 import PushSettings from './push-settings';
-import { PEOPLE, both, budgetSummary, decisionComplete } from '../lib/domain.mjs';
+import PlannerFields, { decisionLabels, expenseLabels } from './planner-forms';
+import { PEOPLE, budgetSummary, expenseStatus } from '../lib/domain.mjs';
 
-const tabs = [['timeline', '타임라인', '◷'], ['budget', '예산 관리', '₩'], ['decisions', '결정 보관함', '♡'], ['inbox', '빠른 기록', '✎']];
+const tabs = [['timeline', '일정', 'calendar'], ['decisions', '결정할 것', 'check'], ['budget', '예산', 'wallet']];
+const active = list => list.filter(x => !x.archived);
 const won = n => n.toLocaleString('ko-KR') + '원';
 const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-function days(date) { if (!date) return '날짜 미정'; const n = Math.round((Date.parse(date) - Date.parse(today())) / 86400000); return n === 0 ? 'D-Day' : n > 0 ? `D−${n}` : `D+${-n}`; }
-function timeLabel(value) { return new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
-const actionLabels = { item: '준비 항목', decision: '결정', candidate: '후보', event: '일정', expense: '지출', budget: '예산', comment: '의견', attachment: '자료', note: '빠른 기록', task: '체크리스트', notification: '알림' };
-const verbLabels = { add: '추가', update: '수정', save: '저장', archive: '보관 상태 변경', vote: '동의 변경', propose: '변경 제안', select: '후보 제안', cancel: '제안 취소', done: '완료 상태 변경', read: '읽음 처리' };
-function activityLabel(action) { const [kind, verb] = action.split('.'); return (actionLabels[kind] || '기록') + ' · ' + (verbLabels[verb] || '변경'); }
-const active = list => list.filter(x => !x.archived);
+function days(value) { if (!value) return '날짜 미정'; const n = Math.round((Date.parse(value) - Date.parse(today())) / 86400000); return n === 0 ? 'D-Day' : n > 0 ? `D−${n}` : `D+${-n}`; }
+function Icon({ name }) {
+  const shapes = { calendar: <><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M7 3v4m10-4v4M3 11h18" /></>, check: <><rect x="3" y="3" width="18" height="18" rx="5" /><path d="m7 12 3 3 7-7" /></>, wallet: <><path d="M19 8V5a2 2 0 0 0-2-2L5 6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8H5" /><path d="M21 12h-5v5h5" /></>, settings: <><circle cx="12" cy="12" r="4" /><path d="M12 2v3m0 14v3M2 12h3m14 0h3M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" /></>, arrow: <path d="m9 5 7 7-7 7" />, close: <path d="m6 6 12 12M6 18 18 6" /> };
+  return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{shapes[name]}</svg>;
+}
 const Button = ({ children, secondary = false, ...props }) => <button type="button" className={secondary ? 'secondary-button' : 'primary-button'} {...props}>{children}</button>;
-function Field({ label, name, type = 'text', value = '', required = false, ...props }) { return <label>{label}<input name={name} type={type} defaultValue={value} required={required} {...props} /></label>; }
-function Select({ label, name, value = '', children, required }) { return <label>{label}<select name={name} defaultValue={value} required={required}>{children}</select></label>; }
+const formTitles = { 'event.save': '일정', 'decision.save': '결정할 것', 'expense.save': '지출 기록', 'budget.save': '예산 설정', 'templates.add': '준비 항목 불러오기', 'candidate.save': '후보', 'attachment.add': '참고 링크', upload: '사진 · PDF', settings: '설정' };
 
 export default function Planner() {
   const [snapshot, setSnapshot] = useState(null), [view, setView] = useState('timeline');
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), busyRef = useRef(false);
-  const [error, setError] = useState(''), [message, setMessage] = useState(''), [status, setStatus] = useState(0);
-  const [modal, setModal] = useState(null), [hideCompleted, setHideCompleted] = useState(false), [showArchived, setShowArchived] = useState(false);
-  const [targetId, setTargetId] = useState('');
-  const [checkedAt, setCheckedAt] = useState(''), [clockTick, tick] = useState(0), [history, setHistory] = useState(null);
-  const dialog = useRef(null);
+  const [status, setStatus] = useState(0), [error, setError] = useState(''), [message, setMessage] = useState('');
+  const [modal, setModal] = useState(null), [filter, setFilter] = useState('active'), [query, setQuery] = useState('');
+  const [targetId, setTargetId] = useState(''), [clockTick, tick] = useState(0);
+  const dialog = useRef(null), modalRef = useRef(null);
+  modalRef.current = modal;
+  const state = snapshot?.state;
   const refresh = useCallback(async () => {
     if (busyRef.current) return;
     try {
-      const response = await fetch('/api/workspace', { cache: 'no-store' }); const body = await response.json();
-      setStatus(response.status);
-      if (!response.ok) throw new Error(body.error);
-      setSnapshot(previous => previous && previous.version > body.version ? previous : body);
-      setCheckedAt(new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })); setError('');
+      const r = await fetch('/api/workspace', { cache: 'no-store' }); const data = await r.json(); setStatus(r.status);
+      if (!r.ok) throw new Error(data.error);
+      setSnapshot(previous => previous && previous.version > data.version ? previous : data); setError('');
     } catch (e) { setError(e.message || '연결을 확인해 주세요.'); } finally { setLoading(false); }
   }, []);
-  useEffect(() => { refresh(); const [hash, target] = location.hash.slice(1).split('/'); if ([...tabs.map(([id]) => id), 'notifications'].includes(hash)) setView(hash); if (target) { try { setTargetId(decodeURIComponent(target)); } catch {} }
-    const onFocus = () => { if (!document.hidden && !dialog.current?.open) refresh(); };
-    window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus);
-    const timer = setInterval(() => tick(x => x + 1), 60000);
+  useEffect(() => {
+    refresh();
+    const route = () => {
+      const [hash, target] = location.hash.slice(1).split('/');
+      setView(hash === 'inbox' ? 'decisions' : tabs.some(([id]) => id === hash) ? hash : 'timeline');
+      setFilter('active'); setQuery('');
+      if (target) { try { setTargetId(decodeURIComponent(target)); } catch {} }
+    };
+    route();
+    const onFocus = () => { if (!document.hidden && !modalRef.current) refresh(); };
+    window.addEventListener('hashchange', route); window.addEventListener('focus', onFocus); document.addEventListener('visibilitychange', onFocus);
+    const timer = setInterval(() => tick(n => n + 1), 60000);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
-    return () => { clearInterval(timer); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
+    return () => { clearInterval(timer); window.removeEventListener('hashchange', route); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
   }, [refresh]);
-  useEffect(() => { if (modal) dialog.current?.showModal(); else dialog.current?.close(); }, [modal]);
-  const state = snapshot?.state, me = snapshot?.user?.role;
-  useEffect(() => { if (!state || !targetId) return; const element = document.getElementById('record-' + targetId); if (element) { element.scrollIntoView({ block: 'center' }); setTargetId(''); } }, [state, view, targetId]);
-  function go(next, target = '') { setTargetId(target); setView(next); setModal(null); setMessage(''); location.hash = next + (target ? '/' + encodeURIComponent(target) : ''); window.scrollTo(0, 0); }
+  useEffect(() => { if (modal && !dialog.current?.open) dialog.current?.showModal(); else if (!modal) dialog.current?.close(); }, [modal]);
+  useEffect(() => { if (message) { const id = setTimeout(() => setMessage(''), 3500); return () => clearTimeout(id); } }, [message]);
+  useEffect(() => {
+    if (!state || !targetId) return;
+    const list = view === 'timeline' ? state.events : view === 'budget' ? state.expenses : state.decisions;
+    const record = list.find(r => r.id === targetId);
+    if (record) setModal({ type: view === 'timeline' ? 'event.save' : view === 'budget' ? 'expense.save' : 'decision.save', record, version: snapshot.version });
+    setTargetId('');
+  }, [state, view, targetId, snapshot?.version]);
+  function go(next) { setModal(null); setView(next); setFilter('active'); setQuery(''); location.hash = next; window.scrollTo(0, 0); }
   function open(type, record = {}, extra = {}) { setError(''); setModal({ type, record, version: snapshot.version, ...extra }); }
-  async function logout() { try { const r = await fetch('/api/auth/logout', { method: 'POST' }); if (!r.ok) throw new Error(); setSnapshot(null); setModal(null); setStatus(401); setError(''); setHistory(null); } catch { setError('로그아웃하지 못했어요. 다시 시도해 주세요.'); } }
-  async function command(type, payload, version = snapshot.version, close = true) {
-    if (busyRef.current) return false; busyRef.current = true; setBusy(true); setError(''); setMessage('');
-    try {
-      const response = await fetch('/api/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: { type, payload }, version }) });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error + (response.status === 409 ? ' 입력한 내용을 확인한 뒤 창을 닫고 새로고침해 주세요.' : ''));
-      setSnapshot(previous => ({ ...previous, ...result })); setMessage(result.message); if (close) setModal(null); return true;
-    } catch (e) { setError(e.message); return false; } finally { busyRef.current = false; setBusy(false); }
+  async function logout() {
+    try { const r = await fetch('/api/auth/logout', { method: 'POST' }); if (!r.ok) throw new Error(); setSnapshot(null); setModal(null); setStatus(401); setError(''); }
+    catch { setError('로그아웃하지 못했어요.'); }
   }
-  async function upload(form) {
-    if (busyRef.current) return; const file = form.get('file'); if (!file?.size) { setError('파일을 선택해 주세요.'); return; }
+  async function command(type, payload, version = snapshot.version, close = true) {
+    if (busyRef.current) return false;
     busyRef.current = true; setBusy(true); setError('');
     try {
-      if (file.size > 25 * 1024 * 1024) throw new Error('원본 파일은 25MB 이하로 선택해 주세요.');
+      const r = await fetch('/api/workspace', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: { type, payload }, version }) });
+      const data = await r.json(); if (!r.ok) throw new Error(data.error + (r.status === 409 ? ' 창을 닫고 새로고침한 뒤 다시 저장해 주세요.' : ''));
+      setSnapshot(previous => ({ ...previous, ...data })); setMessage(data.message);
+      if (close) setModal(null);
+      else setModal(previous => previous ? { ...previous, version: data.version, record: data.state.decisions.find(d => d.id === previous.record.id) || previous.record } : null);
+      return true;
+    } catch (e) { setError(e.message); return false; }
+    finally { busyRef.current = false; setBusy(false); }
+  }
+  async function upload(f) {
+    if (busyRef.current) return; const file = f.get('file'); if (!file?.size) return;
+    busyRef.current = true; setBusy(true); setError('');
+    try {
+      if (file.size > 25 * 1024 * 1024) throw new Error('25MB 이하 파일을 선택해 주세요.');
       const body = await compressImage(file);
       if (body.size > 4 * 1024 * 1024) throw new Error('압축 후에도 4MB를 넘어요. 더 작은 파일을 선택해 주세요.');
       const params = new URLSearchParams({ title: file.name.slice(0, 200), kind: modal.kind, targetId: modal.record.id, version: modal.version });
-      const response = await fetch('/api/attachments?' + params, { method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body });
-      const result = await response.json(); if (!response.ok) throw new Error(result.error);
-      setSnapshot(previous => ({ ...previous, ...result })); setModal(null); setMessage('비공개 자료로 저장했어요.');
+      const r = await fetch('/api/attachments?' + params, { method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body });
+      const data = await r.json(); if (!r.ok) throw new Error(data.error);
+      setSnapshot(previous => ({ ...previous, ...data })); setModal(null); setMessage('자료를 저장했어요.');
     } catch (e) { setError(e.message); } finally { busyRef.current = false; setBusy(false); }
   }
   async function submit(event) {
     event.preventDefault(); const f = new FormData(event.currentTarget), get = key => String(f.get(key) ?? ''), number = key => get(key).trim() === '' ? null : Number(get(key));
-    const record = modal.record; let type = modal.type, payload;
-    switch (type) {
-      case 'item.add': payload = { title: get('title') }; break;
-      case 'item.update': payload = { id: record.id, title: get('title'), archived: record.archived }; break;
-      case 'note.add': payload = { title: get('title') }; break;
-      case 'task.add': payload = { eventId: record.id, title: get('title') }; break;
-      case 'note.update': payload = { id: record.id, title: get('title'), itemId: get('itemId'), done: f.has('done') }; break;
-      case 'decision.add': payload = { itemId: modal.itemId, parentId: modal.parentId || '', title: get('title') }; break;
-      case 'decision.update': payload = { id: record.id, title: get('title'), archived: record.archived }; break;
-      case 'candidate.save': payload = { id: record.id, decisionId: modal.decisionId, title: get('title'), detail: get('detail'), quote: number('quote'), link: get('link') }; break;
-      case 'decision.select': payload = { id: record.id, optionId: get('optionId'), reason: get('reason') }; break;
-      case 'event.save': payload = { id: record.id, title: get('title'), date: get('date'), time: get('time'), place: get('place'), memo: get('memo'), itemId: get('itemId') }; break;
-      case 'expense.save': payload = { id: record.id, title: get('title'), amount: number('amount'), paid: number('paid'), categoryId: get('categoryId'), detail: get('detail'), decisionId: get('decisionId') }; break;
-      case 'budget.propose': {
-        const categories = state.settings.categories.filter(c => !f.has('remove-' + c.id)).map(c => ({ ...c, title: get('title-' + c.id), included: f.has('included-' + c.id) }));
+    const r = modal.record; let payload;
+    switch (modal.type) {
+      case 'event.save': payload = { id: r.id, title: get('title'), date: get('date'), time: get('time'), place: get('place'), memo: get('memo'), itemId: r.itemId || '', checklistId: get('checklistId'), newTasks: get('newTasks'), taskStates: (r.tasks || []).filter(t => !t.archived).map(t => ({ id: t.id, done: f.has('task-' + t.id) })) }; break;
+      case 'decision.save': payload = { id: r.id, title: get('title'), status: get('status'), itemId: get('itemId'), result: get('result'), memo: get('memo') }; break;
+      case 'expense.save': payload = { id: r.id, title: get('title'), status: get('status'), categoryId: get('categoryId'), amount: number('amount'), paid: number('paid'), dueDate: get('dueDate'), detail: get('detail'), decisionId: get('decisionId') }; break;
+      case 'budget.save': {
+        const categories = state.settings.categories.map(c => ({ ...c, title: get('category-' + c.id), included: f.has('included-' + c.id) }));
         if (get('newCategory').trim()) categories.push({ title: get('newCategory'), included: f.has('newIncluded') });
         payload = { budget: number('budget'), scope: get('scope'), categories }; break;
       }
-      case 'comment.add': payload = { kind: modal.kind, targetId: record.id, body: get('body') }; break;
-      case 'attachment.add': payload = { kind: modal.kind, targetId: record.id, title: get('title'), url: get('url') }; break;
+      case 'templates.add': payload = { ids: f.getAll('templates') }; break;
+      case 'candidate.save': payload = { id: r.id, decisionId: modal.decisionId, title: get('title'), quote: number('quote'), detail: get('detail'), link: get('link') }; break;
+      case 'attachment.add': payload = { kind: modal.kind, targetId: r.id, title: get('title'), url: get('url') }; break;
       case 'upload': return upload(f);
       default: return;
     }
-    await command(type, payload, modal.version);
+    await command(modal.type, payload, modal.version);
   }
-  function vote(kind, record) { return <div className="live-votes">{Object.entries(PEOPLE).map(([role, name]) => <span key={role} className={record.votes[role] ? 'approved' : ''}>{name} {record.votes[role] ? '✓' : '대기'}</span>)}<Button secondary={!!record.votes[me]} disabled={busy} onClick={() => command(kind + '.vote', { id: record.id, revision: record.revision, agree: !record.votes[me] })}>{record.votes[me] ? '내 동의 철회' : '내용 확인 · 동의'}</Button></div>; }
-  function related(kind, record) {
-    const comments = state.comments.filter(c => c.kind === kind && c.targetId === record.id), files = state.attachments.filter(a => a.kind === kind && a.targetId === record.id);
-    return <div className="live-comments">{comments.map(c => <div className="live-comment" key={c.id}><strong>{PEOPLE[c.author]} · {timeLabel(c.createdAt)}</strong><p>{c.body}</p></div>)}<div className="live-attachments">{files.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.url ? '↗' : a.type.startsWith('image/') ? '▧' : '▤'} {a.title}</a>)}</div><div className="live-row"><Button secondary disabled={busy} onClick={() => open('comment.add', record, { kind })}>의견 남기기</Button><Button secondary disabled={busy} onClick={() => open('attachment.add', record, { kind })}>링크</Button><Button secondary disabled={busy || !snapshot.storageEnabled} onClick={() => open('upload', record, { kind })}>사진 · PDF</Button></div>{!snapshot.storageEnabled && <p className="live-subtle">사진·PDF는 비공개 저장소 연결 후 사용할 수 있어요.</p>}</div>;
+  function matches(record, value = '') { return (record.title + ' ' + value).toLowerCase().includes(query.trim().toLowerCase()); }
+  function toolbar(options) {
+    return <div className="simple-toolbar"><label className="simple-search"><span className="sr-only">검색</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="이름으로 검색" /></label><label><span className="sr-only">표시할 항목</span><select value={filter} onChange={e => setFilter(e.target.value)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label></div>;
   }
-  function itemOptions() { return <><option value="">연결하지 않음</option>{state.items.map(i => <option key={i.id} value={i.id}>{i.title}{i.archived ? ' (보관됨)' : ''}</option>)}</>; }
-  function modalFields() {
-    const r = modal.record;
-    if (['item.add', 'item.update', 'note.add', 'note.update', 'decision.add', 'decision.update', 'task.add'].includes(modal.type)) return <><Field label={modal.type.startsWith('decision') ? '함께 결정할 질문' : '제목'} name="title" value={modal.type === 'task.add' ? '' : r.title} required maxLength={200} autoFocus />{modal.type === 'note.update' && <><Select name="itemId" label="준비 항목으로 분류" value={r.itemId}>{itemOptions()}</Select><label className="check-label"><input type="checkbox" name="done" defaultChecked={r.done} />완료한 기록</label></>}</>;
-    if (modal.type === 'candidate.save') return <><Field label="후보 이름" name="title" value={r.title} required maxLength={200} autoFocus /><label>조건과 설명<textarea name="detail" defaultValue={r.detail} maxLength={5000} /></label><Field label="견적 (원) · 미입력이면 비워두기" name="quote" type="number" value={r.quote ?? ''} min="0" max="10000000000" step="1" /><Field label="참고 링크" name="link" type="url" value={r.link} maxLength={2000} /><p className="live-subtle">후보 견적은 비교용이에요. 예산에는 지출로 기록한 금액만 포함돼요. 후보를 수정하면 기존 동의가 초기화돼요.</p></>;
-    if (modal.type === 'decision.select') return <><Select label="함께 선택할 후보" name="optionId" value={r.selectedId} required><option value="">후보 선택</option>{r.options.map(o => <option key={o.id} value={o.id}>{o.title}</option>)}</Select><label>선택 이유<textarea name="reason" defaultValue={r.reason} maxLength={2000} /></label><p className="live-subtle">제안 후 본인 계정으로 동의해 주세요. 상대방도 동의하면 후보가 확정돼요.</p></>;
-    if (modal.type === 'event.save') return <><Field label="일정 이름" name="title" value={r.title} required maxLength={200} autoFocus /><div className="two-fields"><Field label="날짜 (한국 시간)" name="date" type="date" value={r.date} /><Field label="시간 · 선택 입력" name="time" type="time" value={r.time} /></div><Field label="장소" name="place" value={r.place} maxLength={300} /><Select label="연결할 준비 항목" name="itemId" value={r.itemId}>{itemOptions()}</Select><label>챙길 것과 메모<textarea name="memo" defaultValue={r.memo} maxLength={5000} /></label><p className="live-subtle">날짜를 비워두면 미정 일정으로 보관해요. 일정 수정 후에는 두 사람의 재동의가 필요해요.</p></>;
-    if (modal.type === 'expense.save') return <><Field label="지출 / 계약 이름" name="title" value={r.title} required maxLength={200} autoFocus /><Select label="분류" name="categoryId" value={r.categoryId || state.settings.categories[0].id}>{state.settings.categories.map(c => <option key={c.id} value={c.id}>{c.title}{!c.included ? ' (예산 제외)' : ''}</option>)}</Select><div className="two-fields"><Field label="총금액 (원)" name="amount" type="number" value={r.amount ?? ''} required min="0" max="10000000000" step="1" /><Field label="지금까지 지급한 금액 (원)" name="paid" type="number" value={r.paid ?? 0} required min="0" max="10000000000" step="1" /></div><Select label="확정한 결정과 연결 · 선택 입력" name="decisionId" value={r.source?.decisionId || ''}><option value="">직접 입력한 비용</option>{state.decisions.filter(d => (!d.archived && both(d.votes)) || d.id === r.source?.decisionId).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</Select><label>계약 조건 · 패키지에 포함된 내용<textarea name="detail" defaultValue={r.detail} maxLength={2000} /></label><p className="live-subtle">총금액에는 계약금과 잔금을 합쳐 입력해 주세요. 패키지에 포함된 구성품은 별도 지출로 추가하지 않아요. 지급액만 바꾸면 동의는 유지돼요.</p></>;
-    if (modal.type === 'budget.propose') return <><Field label="목표 예산 (원)" name="budget" type="number" value={state.settings.budget} min="0" max="10000000000" step="1" required /><Field label="예산 범위" name="scope" value={state.settings.scope} required maxLength={200} /><p className="live-subtle">아래 분류별로 이름과 포함 여부를 바꿀 수 있어요. 상대방이 동의해야 실제 예산에 적용돼요.</p>{state.settings.categories.map(c => <div key={c.id} className="live-option"><Field label="분류 이름" name={'title-' + c.id} value={c.title} required maxLength={60} /><label className="check-label"><input type="checkbox" name={'included-' + c.id} defaultChecked={c.included} />총예산에 포함</label>{!state.expenses.some(e => e.categoryId === c.id) && <label className="check-label"><input type="checkbox" name={'remove-' + c.id} />사용하지 않는 분류 삭제</label>}</div>)}<Field label="새 분류 추가 · 선택 입력" name="newCategory" maxLength={60} /><label className="check-label"><input type="checkbox" name="newIncluded" defaultChecked />새 분류를 예산에 포함</label></>;
-    if (modal.type === 'comment.add') return <label>함께 나눌 의견<textarea name="body" required maxLength={5000} autoFocus placeholder="어떤 점이 마음에 드는지, 무엇이 고민인지 남겨주세요." /></label>;
-    if (modal.type === 'attachment.add') return <><Field label="자료 이름" name="title" required maxLength={200} /><Field label="링크 주소" name="url" type="url" required maxLength={2000} /></>;
-    if (modal.type === 'upload') return <><Field label="사진 또는 PDF" name="file" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" required /><p className="live-subtle">사진은 최대 1,600px로 줄여 저장해요. 파일은 4MB까지 가능해요. HEIC 사진은 JPEG로 변환해 첨부해 주세요.</p></>;
-  }
-  function eventCard(e) { return <article key={e.id} id={'record-' + e.id} className="live-card surface"><div className="live-row between"><span className="chip">{e.done ? '일정 완료' : days(e.date)}</span><span className={'chip ' + (both(e.votes) ? '' : 'pending')}>{both(e.votes) ? '2/2 확정' : `${Object.keys(e.votes).length}/2 동의`}</span></div><h3 style={{ marginTop: 12 }}>{e.title}</h3><p className="card-copy">{e.date ? e.date.replaceAll('-', '.') : '날짜 미정'} {e.time} · {e.place || '장소 미등록'}</p>{e.memo && <p className="memo">{e.memo}</p>}{!e.archived && vote('event', e)}<div className="live-row"><Button secondary disabled={busy} onClick={() => open('event.save', e)}>수정</Button><Button secondary disabled={busy || e.archived} onClick={() => open('task.add', e)}>+ 준비할 일</Button>{both(e.votes) && !e.archived && <Button secondary disabled={busy} onClick={() => command('event.done', { id: e.id, done: !e.done })}>{e.done ? '완료 취소' : '일정 완료'}</Button>}{e.id !== 'wedding' && <Button secondary disabled={busy} onClick={() => command('event.archive', { id: e.id, archived: !e.archived })}>{e.archived ? '복원' : '보관'}</Button>}</div>{e.tasks?.length > 0 && <div className="live-comments"><p className="live-subtle">준비 체크리스트 · {active(e.tasks).filter(t => t.done).length}/{active(e.tasks).length}</p>{e.tasks.filter(t => showArchived || !t.archived).map(t => <div className="live-row between" key={t.id}><label className="live-row"><input type="checkbox" checked={t.done} disabled={busy} onChange={() => command('task.update', { ...t, eventId: e.id, done: !t.done, archived: !!t.archived })} /><span style={{ textDecoration: t.done ? 'line-through' : '' }}>{t.title}</span></label><button type="button" className="text-button" disabled={busy} onClick={() => command('task.update', { ...t, eventId: e.id, archived: !t.archived })}>{t.archived ? '복원' : '보관'}</button></div>)}</div>}{related('event', e)}</article>; }
-  function question(d, depth = 0) {
-    return <article key={d.id} id={'record-' + d.id} className="live-question" style={{ marginLeft: Math.min(depth, 3) * 8 }}><div className="live-row between"><h3>{d.title}</h3><span className="chip">{d.archived ? '보관됨' : decisionComplete(state, d.id) ? '결정 완료' : both(d.votes) ? '선택 확정 · 하위 결정 남음' : '논의 중'}</span></div>
-      {d.options.filter(o => showArchived || !o.archived).map(o => <div key={o.id} className={'live-option ' + (d.selectedId === o.id ? 'selected' : '')}><div className="live-row between"><strong>{o.archived ? '[보관됨] ' : ''}{d.selectedId === o.id ? '♡ ' : ''}{o.title}</strong><small>{o.quote === null ? '견적 미입력' : won(o.quote)}</small></div>{o.detail && <p>{o.detail}</p>}{o.link && <a className="text-button" href={o.link} target="_blank" rel="noopener noreferrer">참고 링크 ↗</a>}<button type="button" className="text-button" onClick={() => open('candidate.save', o, { decisionId: d.id })}>후보 수정</button><button type="button" className="text-button" disabled={busy} onClick={() => command('candidate.archive', { decisionId: d.id, id: o.id, archived: !o.archived })}>{o.archived ? '복원' : '보관'}</button><details><summary>후보 의견 · 자료</summary>{related('candidate', o)}</details></div>)}
-      {d.reason && <p className="memo">선택 이유 · {d.reason}</p>}{d.selectedId && !d.archived && vote('decision', d)}
-      <div className="live-row" style={{ marginTop: 12 }}>{!d.archived && <><Button secondary disabled={busy} onClick={() => open('candidate.save', {}, { decisionId: d.id })}>후보 추가</Button>{d.options.length > 0 && <Button disabled={busy} onClick={() => open('decision.select', d)}>후보 제안</Button>}<Button secondary disabled={busy} onClick={() => open('decision.add', {}, { itemId: d.itemId, parentId: d.id })}>하위 질문</Button></>}<Button secondary disabled={busy} onClick={() => open('decision.update', d)}>질문 수정</Button><Button secondary disabled={busy} onClick={() => command('decision.update', { id: d.id, title: d.title, archived: !d.archived })}>{d.archived ? '복원' : '보관'}</Button></div>
-      <details><summary>질문에 대한 의견 · 자료</summary>{related('decision', d)}</details>
-      {state.decisions.filter(x => x.parentId === d.id && (showArchived || !x.archived)).map(child => question(child, depth + 1))}</article>;
-  }
+  function empty(text) { return <div className="simple-empty"><Icon name={tabs.find(t => t[0] === view)[2]} /><p>{text}</p></div>; }
   function timeline() {
-    const events = state.events.filter(e => (showArchived || !e.archived) && (!hideCompleted || !e.done));
-    const dated = events.filter(e => e.date).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
-    return <><section className="journey surface"><div className="live-row between"><h2 className="section-label">한 줄의 여정</h2><label className="live-row live-subtle"><input type="checkbox" checked={hideCompleted} onChange={e => setHideCompleted(e.target.checked)} />완료 일정 숨기기</label></div><details className="live-journey-details" ref={element => { if (element && !element.dataset.initialized) { element.open = window.matchMedia('(min-width: 761px)').matches; element.dataset.initialized = 'yes'; } }}><summary>전체 타임라인 · {dated.length}개의 순간</summary><div className="milestone-scroll" role="region" aria-label="수평 타임라인" tabIndex={0}><div className="milestones">{dated.map(e => <button type="button" key={e.id} className={'milestone ' + (e.done ? 'done' : '')} onClick={() => document.getElementById('record-' + e.id)?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' })}><span className="node">{e.id === 'wedding' ? '♡' : e.done ? '✓' : '·'}</span><time>{e.date.replaceAll('-', '.')}</time><strong>{e.title}</strong><span className="chip">{days(e.date)}</span></button>)}</div></div><p className="journey-note">점 간격은 일정 순서를 보여줘요. 실제 기간에 비례하지 않아요.</p></details></section><div className="live-grid"><section className="live-stack"><div className="section-head"><h2>우리의 일정</h2><Button onClick={() => open('event.save')}>+ 일정</Button></div>{dated.length ? dated.map(eventCard) : <div className="live-empty surface">등록한 일정이 없어요.</div>}</section><aside className="live-stack"><h2 className="section-label">날짜 미정</h2>{events.filter(e => !e.date).map(eventCard)}<div className="live-card surface"><h3>문득 떠오른 준비</h3><form className="quick-form" onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; const title = new FormData(form).get('title'); if (await command('note.add', { title })) form.reset(); }}><label className="sr-only" htmlFor="quick-title">빠른 기록</label><input id="quick-title" name="title" required maxLength={200} placeholder="제목만 남겨도 괜찮아요" /><button type="submit" className="primary-button" disabled={busy}>추가</button></form><p className="live-subtle">날짜와 자세한 내용은 나중에 정해요.</p><Button secondary onClick={() => go('inbox')}>기록 {active(state.notes).filter(n => !n.done).length}개 보기</Button></div></aside></div></>;
+    const events = state.events.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (filter === 'active' ? !e.done : filter === 'done' ? e.done : true) && matches(e));
+    events.sort((a, b) => (a.date || '9999') .localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
+    const dated = active(state.events).filter(e => e.date && !e.done).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    return <>
+      {dated.length > 1 && <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(e => <button type="button" key={e.id} onClick={() => open('event.save', e)}><time>{e.date.slice(5).replace('-', '.')}</time><span className={'simple-dot' + (e.id === 'wedding' ? ' wedding' : '')}>{e.id === 'wedding' ? '♡' : ''}</span><strong>{e.title}</strong></button>)}</div></section>}
+      {toolbar([['active', '남은 일정'], ['all', '전체'], ['done', '완료'], ['archived', '보관함']])}
+      <section className="simple-list">{events.map((e, i) => <div key={e.id}>{(!i || events[i - 1].date?.slice(0, 7) !== e.date?.slice(0, 7)) && <h2 className="simple-month">{e.date ? `${e.date.slice(0, 4)}년 ${Number(e.date.slice(5, 7))}월` : '날짜 미정'}</h2>}<article className={'simple-row ' + (e.done ? 'is-done' : '')}>
+        <label className="simple-complete"><span className="sr-only">{e.title} 완료</span><input type="checkbox" checked={e.done} disabled={busy || e.archived} onChange={() => command('event.done', { id: e.id, done: !e.done })} /></label>
+        <button type="button" className="simple-record" onClick={() => open('event.save', e)}><span className="simple-day">{e.date ? e.date.slice(8) : '—'}<small>{e.date ? new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(e.date + 'T12:00:00+09:00')) : '미정'}</small></span><span className="simple-record-copy"><strong>{e.title}</strong><small>{[e.time, e.place].filter(Boolean).join(' · ') || '세부 일정은 나중에 정해도 돼요'}</small></span><Icon name="arrow" /></button>
+      </article></div>)}{!events.length && empty(query ? '검색 결과가 없어요.' : '여기에 일정이 표시돼요. 새 일정을 추가해 보세요.')}</section>
+    </>;
+  }
+  function decisions() {
+    const list = state.decisions.filter(d => (filter === 'archived' ? d.archived : !d.archived) && (filter === 'active' ? d.status !== 'done' : ['todo', 'doing', 'done'].includes(filter) ? d.status === filter : true) && matches(d, d.result));
+    const all = active(state.decisions), done = all.filter(d => d.status === 'done').length;
+    return <>
+      <form className="simple-quick" onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; if (await command('decision.save', { title: new FormData(form).get('title'), status: 'todo' })) form.reset(); }}><label className="sr-only" htmlFor="quick-decision">결정할 것 빠르게 추가</label><input id="quick-decision" name="title" required maxLength={200} placeholder="생각난 것을 한 줄로 남겨요" /><button className="primary-button" type="submit" disabled={busy}>추가</button></form>
+      <div className="simple-progress-label"><span>{all.length ? `${all.length}개 중 ${done}개 완료` : '하나씩 정해 나가요'}</span><button type="button" className="text-button" onClick={() => open('templates.add')}>준비 항목 불러오기</button></div>
+      {toolbar([['active', '남은 결정'], ['all', '전체'], ['todo', '미정'], ['doing', '진행 중'], ['done', '완료'], ['archived', '보관함']])}
+      <section className="simple-list">{list.map(d => <article className={'simple-row ' + (d.status === 'done' ? 'is-done' : '')} key={d.id}>
+        <button type="button" className="simple-record" onClick={() => open('decision.save', d)}><span className="simple-record-copy"><small>{state.items.find(i => i.id === d.itemId)?.title || '준비할 것'}{d.parentId ? ' · ' + (state.decisions.find(parent => parent.id === d.parentId)?.title || '') : ''}</small><strong>{d.title}</strong>{d.result && <p>{d.result}</p>}</span></button>
+        <label className={'simple-status ' + d.status}><span className="sr-only">{d.title} 상태</span><select aria-label={`${d.title} 상태`} value={d.status} disabled={busy || d.archived} onChange={e => command('decision.status', { id: d.id, status: e.target.value })}>{Object.entries(decisionLabels).map(([v, l]) => <option value={v} key={v}>{l}</option>)}</select></label>
+      </article>)}{!list.length && empty(query ? '검색 결과가 없어요.' : '정할 것이 떠오르면 바로 적어두세요.')}</section>
+    </>;
   }
   function budget() {
-    const b = budgetSummary(state), proposal = state.budgetProposal;
-    return <><section className="live-card surface"><div className="live-row between"><span className="live-subtle">{state.settings.scope}</span><Button secondary onClick={() => open('budget.propose')}>예산 · 범위 변경</Button></div><p className="live-subtle">최종 예상 총지출</p><div className="live-amount">{won(b.total)}</div><div className="live-row"><span className="chip">목표 {won(b.budget)}</span><span className={'chip ' + (b.remaining < 0 ? 'danger' : '')}>{won(Math.abs(b.remaining))} {b.remaining < 0 ? '초과' : '여유'}</span><span className="live-subtle">{b.ratio === null ? '목표 0원 · 비율 없음' : `목표 대비 ${(b.ratio * 100).toFixed(1)}% 예상`}</span></div><div className="live-track" role="img" aria-label={`지급 완료 ${won(b.paid)}, 확정 미지급 ${won(b.committed)}, 미확정 예상 ${won(b.estimated)}, 목표 ${won(b.budget)}`}><div className="live-segment paid" style={{ width: b.paid / b.axis * 100 + '%' }} /><div className="live-segment committed" style={{ width: b.committed / b.axis * 100 + '%' }} /><div className="live-segment estimated" style={{ width: b.estimated / b.axis * 100 + '%' }} /><div className="live-target" style={{ left: b.budget / b.axis * 100 + '%' }}><span>목표 예산</span></div>{b.remaining < 0 && <div className="live-over" style={{ left: b.budget / b.axis * 100 + '%', width: -b.remaining / b.axis * 100 + '%' }} />}</div><div className="live-legends">{[['지급 완료', b.paid], ['확정 미지급', b.committed], ['미확정 예상', b.estimated]].map(([title, value]) => <div key={title}><small>{title}</small><strong>{won(value)}</strong></div>)}</div><p className="live-subtle">지급액은 실제 기록이며, 두 사람이 금액에 동의하면 남은 금액을 확정 미지급으로 분류해요. 후보 견적은 자동 합산되지 않아요.</p></section>
-      {proposal && <section className="live-card surface"><span className="chip pending">예산 변경 동의 대기</span><h2 style={{ marginTop: 12 }}>{won(state.settings.budget)} → {won(proposal.settings.budget)}</h2><p>범위: {state.settings.scope} → {proposal.settings.scope}</p><p className="live-subtle">변경 후 포함: {proposal.settings.categories.filter(c => c.included).map(c => c.title).join(', ') || '없음'}<br />제외: {proposal.settings.categories.filter(c => !c.included).map(c => c.title).join(', ') || '없음'}</p>{vote('budget', proposal)}<Button secondary disabled={busy} onClick={() => command('budget.cancel', {})}>제안 취소</Button></section>}
-      <section className="live-card surface"><div className="section-head"><h2>항목별 지출</h2><Button onClick={() => open('expense.save')}>+ 지출 / 견적</Button></div><div style={{ overflowX: 'auto' }}><table className="live-table"><thead><tr><th>분류</th><th>지급 완료</th><th>확정 미지급</th><th>미확정 예상</th><th>합계</th></tr></thead><tbody>{b.rows.map(r => <tr key={r.id}><td>{r.title}{!r.included && ' · 제외'}</td><td>{won(r.paid)}</td><td>{won(r.committed)}</td><td>{won(r.estimated)}</td><td>{won(r.total)}</td></tr>)}</tbody></table></div></section><div className="live-grid">{state.expenses.filter(e => showArchived || !e.archived).map(e => <article className="live-card surface" id={'record-' + e.id} key={e.id}><div className="live-row between"><h3>{e.title}</h3><span className="chip">{e.archived ? '보관됨' : both(e.votes) ? '금액 확정' : '금액 동의 대기'}</span></div><p className="live-amount">{won(e.amount)}</p><p>지급 {won(e.paid)} · 남은 금액 {won(e.amount - e.paid)}</p>{e.detail && <p className="live-subtle">{e.detail}</p>}{!e.archived && vote('expense', e)}<div className="live-row"><Button secondary onClick={() => open('expense.save', e)}>금액 · 지급 수정</Button><Button secondary disabled={busy} onClick={() => command('expense.archive', { id: e.id, archived: !e.archived })}>{e.archived ? '복원' : '보관'}</Button></div><details><summary>의견 · 계약 자료</summary>{related('expense', e)}</details></article>)}</div>{!state.expenses.length && <p className="live-empty">아직 지출 기록이 없어요. 실제 견적부터 차근차근 남겨보세요.</p>}</>;
+    const b = budgetSummary(state);
+    const expenses = state.expenses.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (['estimated', 'confirmed', 'paid'].includes(filter) ? expenseStatus(e) === filter : true) && matches(e));
+    const due = active(state.expenses).filter(e => e.dueDate && e.amount > e.paid && e.dueDate >= today() && e.dueDate <= new Date(Date.parse(today()) + 30 * 86400000).toISOString().slice(0, 10) && state.settings.categories.find(c => c.id === e.categoryId)?.included);
+    return <>
+      <section className="simple-budget surface"><div className="simple-budget-top"><div><small>{state.settings.scope}</small><h2>예상 총지출</h2><strong className="simple-total">{won(b.total)}</strong></div><button type="button" className="text-button" onClick={() => open('budget.save')}>예산 설정</button></div>
+        <div className="simple-budget-balance"><span>목표 {won(b.budget)}</span><strong className={b.remaining < 0 ? 'simple-danger' : ''}>{won(Math.abs(b.remaining))} {b.remaining < 0 ? '초과' : '여유'}</strong></div>
+        <div className="live-track" role="img" aria-label={`지급 완료 ${won(b.paid)}, 확정 미지급 ${won(b.committed)}, 예상 ${won(b.estimated)}, 목표 ${won(b.budget)}`}><div className="live-segment paid" style={{ width: b.paid / b.axis * 100 + '%' }} /><div className="live-segment committed" style={{ width: b.committed / b.axis * 100 + '%' }} /><div className="live-segment estimated" style={{ width: b.estimated / b.axis * 100 + '%' }} /><div className="live-target" style={{ left: b.budget / b.axis * 100 + '%' }}><span>목표</span></div>{b.remaining < 0 && <div className="live-over" style={{ left: b.budget / b.axis * 100 + '%', width: -b.remaining / b.axis * 100 + '%' }} />}</div>
+        <div className="simple-budget-legend">{[['paid', '지급 완료', b.paid], ['confirmed', '확정 미지급', b.committed], ['estimated', '예상', b.estimated]].map(([c, title, value]) => <div key={c}><span><i className={c} />{title}</span><strong>{won(value)}</strong></div>)}</div>
+        {due.length > 0 && <p className="simple-due">30일 안에 결제 예정 · {due.length}건 / {won(due.reduce((sum, e) => sum + e.amount - e.paid, 0))}</p>}
+      </section>
+      <details className="simple-category-summary"><summary>분류별 합계</summary>{b.rows.map(c => <div key={c.id}><span>{c.title}{!c.included && ' · 예산 제외'}</span><strong>{won(c.total)}</strong></div>)}</details>
+      {toolbar([['active', '전체 지출'], ['estimated', '예상'], ['confirmed', '확정'], ['paid', '지급 완료'], ['archived', '보관함']])}
+      <section className="simple-list">{expenses.map(e => <article className="simple-row" key={e.id}><button type="button" className="simple-record" onClick={() => open('expense.save', e)}><span className="simple-record-copy"><small>{state.settings.categories.find(c => c.id === e.categoryId)?.title}<span className={'simple-tag ' + expenseStatus(e)}>{expenseLabels[expenseStatus(e)]}</span></small><strong>{e.title}</strong><small>{e.dueDate && e.amount > e.paid ? `${e.dueDate.replaceAll('-', '.')} 결제 예정 · ` : ''}지급 {won(e.paid)}</small></span><span className="simple-expense-amount"><strong>{won(e.amount)}</strong><small>남은 금액 {won(e.amount - e.paid)}</small></span><Icon name="arrow" /></button></article>)}{!expenses.length && empty(query ? '검색 결과가 없어요.' : '견적이나 지출을 기록하면 예산을 바로 확인할 수 있어요.')}</section>
+    </>;
   }
-  function decisions() { return <><div className="section-head"><p className="live-subtle">큰 준비 안에 질문, 후보, 이어지는 결정을 쌓아가요.</p><Button onClick={() => open('item.add')}>+ 준비 항목</Button></div><div className="live-stack">{state.items.filter(i => showArchived || !i.archived).map(item => { const roots = state.decisions.filter(d => d.itemId === item.id && !d.parentId && (showArchived || !d.archived)); return <section className="live-card surface" id={'record-' + item.id} key={item.id}><div className="live-row between"><h2>{item.title}</h2><span className="chip">{item.archived ? '보관됨' : roots.length && roots.every(d => decisionComplete(state, d.id)) ? '모든 결정 완료' : '함께 준비 중'}</span></div>{roots.map(d => question(d))}<div className="live-row" style={{ marginTop: 16 }}>{!item.archived && <><Button onClick={() => open('decision.add', {}, { itemId: item.id })}>+ 결정할 질문</Button><Button secondary onClick={() => open('event.save', { itemId: item.id })}>일정 연결</Button></>}<Button secondary onClick={() => open('item.update', item)}>이름 수정</Button><Button secondary disabled={busy} onClick={() => command('item.update', { id: item.id, title: item.title, archived: !item.archived })}>{item.archived ? '복원' : '보관'}</Button></div><details><summary>준비 항목에 대한 의견 · 자료</summary>{related('item', item)}</details></section>; })}</div></>; }
-  function inbox() { return <><div className="section-head"><p className="live-subtle">기억해 둘 것들을 한 줄씩. 준비 항목으로 연결할 수 있어요.</p><Button onClick={() => open('note.add')}>+ 빠른 기록</Button></div><div className="live-stack">{state.notes.filter(n => showArchived || !n.archived).map(n => <article className="live-card surface" id={'record-' + n.id} key={n.id}><div className="live-row between"><h3 style={{ textDecoration: n.done ? 'line-through' : '' }}>{n.title}</h3><span className="chip">{n.archived ? '보관됨' : n.done ? '완료' : '기록'}</span></div><p className="live-subtle">{PEOPLE[n.createdBy]} · {timeLabel(n.createdAt)}{n.itemId && ' · ' + state.items.find(i => i.id === n.itemId)?.title}</p><div className="live-row"><Button secondary disabled={busy} onClick={() => command('note.update', { ...n, done: !n.done })}>{n.done ? '완료 취소' : '완료'}</Button><Button secondary onClick={() => open('note.update', n)}>수정 · 분류</Button><Button secondary disabled={busy} onClick={() => command('note.archive', { id: n.id, archived: !n.archived })}>{n.archived ? '복원' : '보관'}</Button></div></article>)}</div>{!state.notes.length && <div className="live-empty surface">아직 기록이 없어요.<br />생각나는 것부터 남겨주세요.</div>}</>; }
-  function notifications() { const list = state.notifications.filter(n => n.to === me); return <div className="live-stack"><div className="section-head"><h2>나에게 온 알림</h2><Button secondary disabled={busy} onClick={() => command('notification.read', {})}>모두 읽음</Button></div><PushSettings publicKey={snapshot.pushKey} />{list.map(n => <article className={'live-card surface ' + (!n.read ? 'live-unread' : '')} key={n.id}><p>{n.title}</p><p className="live-subtle">{timeLabel(n.createdAt)}</p><Button secondary onClick={() => go(n.target, n.entityId)}>관련 화면 보기</Button></article>)}{!list.length && <p className="live-empty">아직 새 알림이 없어요.</p>}<Button secondary onClick={async () => { try { const r = await fetch('/api/history', { cache: 'no-store' }); const data = await r.json(); if (!r.ok) throw new Error(data.error); setHistory(data); } catch (e) { setError(e.message); } }}>최근 변경 이력</Button>{history && <div className="live-card surface">{history.map(h => <p className="live-subtle" key={h.version}>{timeLabel(h.created_at)} · {PEOPLE[h.actor]} · {activityLabel(h.action)}</p>)}</div>}</div>; }
-  if (loading) return <main className="setup-page surface" role="status">두 사람의 기록을 불러오고 있어요…</main>;
+  function related(kind, record) {
+    const files = state.attachments.filter(a => a.kind === kind && a.targetId === record.id);
+    return <details className="simple-more simple-related"><summary>참고 자료{files.length ? ` (${files.length})` : ''}</summary><div className="simple-files">{files.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.title} ↗</a>)}</div><div className="simple-actions"><Button secondary disabled={busy} onClick={() => open('attachment.add', record, { kind })}>링크 추가</Button>{snapshot.storageEnabled && <Button secondary disabled={busy} onClick={() => open('upload', record, { kind })}>사진 · PDF</Button>}</div></details>;
+  }
+  function extras() {
+    const r = modal.record, kind = modal.type.split('.')[0];
+    if (!r.id || !['event.save', 'decision.save', 'expense.save'].includes(modal.type)) return null;
+    return <>
+      {kind === 'decision' && <details className="simple-more"><summary>후보 비교{r.options?.length ? ` (${active(r.options).length})` : ''}</summary>{r.options?.map(o => <div className="simple-candidate" key={o.id}><div><strong>{o.title}{o.archived ? ' · 보관됨' : ''}</strong>{o.quote != null && <small>{won(o.quote)}</small>}</div>{o.detail && <p>{o.detail}</p>}{o.link && <a href={o.link} target="_blank" rel="noopener noreferrer">참고 링크 ↗</a>}<div className="simple-actions">{!o.archived && <Button secondary disabled={busy || r.archived} onClick={() => command('decision.select', { id: r.id, optionId: o.id }, modal.version)}>이 후보로 결정</Button>}<button type="button" className="text-button" disabled={busy} onClick={() => open('candidate.save', o, { decisionId: r.id })}>수정</button><button type="button" className="text-button" disabled={busy} onClick={() => command('candidate.archive', { decisionId: r.id, id: o.id, archived: !o.archived }, modal.version, false)}>{o.archived ? '복원' : '보관'}</button></div>{related('candidate', o)}</div>)}<Button secondary disabled={busy || r.archived} onClick={() => open('candidate.save', {}, { decisionId: r.id })}>후보 추가</Button></details>}
+      {related(kind, r)}
+      {kind === 'decision' && r.itemId && state.attachments.some(a => a.kind === 'item' && a.targetId === r.itemId) && related('item', state.items.find(i => i.id === r.itemId))}
+      {r.id !== 'wedding' && (kind !== 'expense' || !r.paid || r.archived) && <button type="button" className="text-button simple-archive" disabled={busy} onClick={() => command(kind + '.archive', { id: r.id, archived: !r.archived }, modal.version)}>{r.archived ? '보관함에서 복원' : '보관함으로 옮기기'}</button>}
+    </>;
+  }
+  if (loading) return <main className="setup-page surface" role="status"><Brand welcome /><p>기록을 불러오고 있어요…</p></main>;
   if (!state || status === 401 || status === 403) return <LoginForm onLogin={refresh} connectionError={status >= 500 ? error : ''} />;
-  const wedding = state.events.find(e => e.id === 'wedding'), unread = state.notifications.filter(n => n.to === me && !n.read).length;
-  const nav = <>{tabs.map(([id, label, glyph]) => <button key={id} type="button" aria-current={view === id ? 'page' : undefined} onClick={() => go(id)}><span aria-hidden="true">{glyph}</span><span>{label}</span></button>)}</>;
-  const title = { timeline: '우리의 여정 타임라인', budget: '우리의 예산 플래너', decisions: '하나씩, 함께 정해요', inbox: '문득 떠오른 준비', notifications: '두 사람의 소식' }[view];
-  const formTitles = { 'task.add': '준비할 일 추가', 'item.add': '준비 항목 추가', 'item.update': '준비 항목 수정', 'note.add': '빠른 기록', 'note.update': '기록 수정', 'decision.add': '함께 결정할 질문', 'decision.update': '질문 수정', 'candidate.save': '후보와 견적', 'decision.select': '후보 제안', 'event.save': '일정 기록', 'expense.save': '지출과 견적 기록', 'budget.propose': '예산 변경 제안', 'comment.add': '의견 남기기', 'attachment.add': '참고 링크', upload: '사진 · PDF 첨부' };
-  return <div className="live-app"><a className="skip-link" href="#main">본문으로 바로가기</a><header className="app-header"><div className="header-inner"><a className="app-logo" href="#timeline" onClick={() => go('timeline')}><span className="logo-flower">✳</span><span><strong>우리의 결혼 준비</strong><small>OUR LITTLE BEGINNING</small></span></a><nav className="desktop-nav" aria-label="주요 화면">{nav}</nav><div className="header-actions"><span className="live-header-name">{PEOPLE[me]} 님</span><button type="button" className="icon-button" aria-label={`알림 ${unread}개`} onClick={() => go('notifications')}>♧{unread > 0 && <small>{unread}</small>}</button><a className="text-button" href="/account">계정</a><button type="button" className="text-button" onClick={logout}>로그아웃</button></div></div></header><div className="live-status"><span>{checkedAt ? `${checkedAt} 확인 · 두 사람의 공동 기록` : '공동 기록'}</span><button type="button" className="text-button" disabled={busy} onClick={refresh}>새로고침 ↻</button></div>{message && <div className="live-message" role="status">{message}</div>}{error && !modal && <div className="live-message live-error" role="alert">{error}</div>}<main id="main" className="live-main"><section className="page-header"><div><p className="eyebrow">{view === 'budget' ? 'OUR LITTLE BUDGET' : 'OUR JOURNEY, TOGETHER'}</p><h1>{title}</h1><p className="page-description">오성현 &amp; 정지윤 · 작은 결정들이 모여, 우리다운 하루로.</p></div><div className="date-ticket"><dl><div><dt>결혼식</dt><dd>{wedding.date || '날짜 미정'}<br />{wedding.time}</dd></div><div><dt>한국 시간</dt><dd>{today()}</dd></div></dl><div><small>OUR WEDDING</small><strong>{days(wedding.date)}</strong></div></div></section><div className="live-row between" style={{ marginBottom: 18 }}><span className="live-subtle">{view === 'notifications' ? '확인할 소식' : '둘만의 준비 공간'}</span><label className="live-row live-subtle"><input type="checkbox" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />보관한 항목 보기</label></div>{{ timeline, budget, decisions, inbox, notifications }[view]()}</main><footer className="app-footer"><span>오성현 &amp; 정지윤</span><span>화면을 다시 열거나 새로고침하면 공동 기록이 갱신돼요</span></footer><nav className="mobile-nav" aria-label="모바일 주요 화면">{nav}</nav><dialog ref={dialog} className="live-dialog" aria-labelledby="live-dialog-title" onCancel={e => { if (busy) e.preventDefault(); else setModal(null); }} onClose={() => { if (!busy) setModal(null); }}><button type="button" className="icon-button dialog-close" aria-label="닫기" disabled={busy} onClick={() => setModal(null)}>×</button>{modal && <><h2 id="live-dialog-title">{formTitles[modal.type]}</h2><form className="live-form" onSubmit={submit}><fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 15 }}>{modalFields()}</fieldset>{error && <p className="live-error" role="alert">{error}</p>}<button type="submit" className="primary-button" disabled={busy}>{busy ? '저장 중…' : modal.type === 'budget.propose' ? '상대방에게 변경 제안' : '저장하기'}</button></form></>}</dialog></div>;
+  const wedding = state.events.find(e => e.id === 'wedding');
+  const nav = tabs.map(([id, label, icon]) => <button type="button" key={id} aria-current={view === id ? 'page' : undefined} onClick={() => go(id)}><Icon name={icon} /><span>{label}</span></button>);
+  const title = tabs.find(t => t[0] === view)[1];
+  return <div className="simple-app"><a className="skip-link" href="#main">본문으로 바로가기</a>
+    <header className="simple-header"><div><a href="#timeline" className="app-logo" onClick={() => go('timeline')}><Brand /></a><nav className="simple-nav" aria-label="주요 화면">{nav}</nav><button type="button" className="simple-settings" aria-label="설정" onClick={() => open('settings')}><Icon name="settings" /></button></div></header>
+    <main id="main" className="simple-main"><div className="simple-context"><span>오성현 &amp; 정지윤 <span>· {wedding?.date?.replaceAll('-', '.')} {wedding?.time}</span></span><strong>{days(wedding?.date)}</strong></div>
+      <div className="simple-heading"><h1>{title}</h1>{view !== 'decisions' && <Button onClick={() => open(view === 'timeline' ? 'event.save' : 'expense.save')}>+ {view === 'timeline' ? '일정 추가' : '지출 추가'}</Button>}</div>
+      {error && !modal && <p className="simple-error" role="alert">{error} <button type="button" className="text-button" onClick={refresh}>다시 불러오기</button></p>}
+      {{ timeline, decisions, budget }[view]()}
+      <footer className="simple-footer"><span>우리의 속도로, 하나씩.</span><button type="button" className="text-button" disabled={busy} onClick={refresh}>새로고침</button></footer>
+    </main>
+    <nav className="simple-mobile-nav" aria-label="모바일 주요 화면">{nav}</nav>
+    {message && <div className="simple-toast" role="status">{message}</div>}
+    <dialog className="simple-dialog" ref={dialog} aria-labelledby="simple-dialog-title" onCancel={e => { if (busy) e.preventDefault(); else setModal(null); }} onClose={() => { if (!busy) setModal(null); }}>
+      {modal && <><div className="simple-dialog-head"><h2 id="simple-dialog-title">{formTitles[modal.type]}</h2><button type="button" className="simple-settings" aria-label="닫기" disabled={busy} onClick={() => setModal(null)}><Icon name="close" /></button></div>
+        {modal.type === 'settings' ? <div className="simple-settings-body"><p>{PEOPLE[snapshot.user.role]} 님으로 로그인했어요.</p><div className="simple-actions"><a href="/account" className="secondary-button">비밀번호 변경</a><Button secondary onClick={logout}>로그아웃</Button></div><details className="simple-more"><summary>휴대폰 알림</summary><PushSettings publicKey={snapshot.pushKey} /></details>{state.attachments.length > 0 && <details className="simple-more"><summary>저장된 자료</summary><div className="simple-files">{state.attachments.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.title} ↗</a>)}</div></details>}</div> : <>
+          <form className="live-form simple-form" key={modal.type + (modal.record.id || '')} onSubmit={submit}><fieldset disabled={busy}><PlannerFields modal={modal} state={state} /></fieldset>{error && <p className="simple-error" role="alert">{error}</p>}<button type="submit" className="primary-button simple-save" disabled={busy}>{busy ? '저장 중…' : modal.type === 'templates.add' ? '선택한 항목 추가' : '저장'}</button></form>{extras()}
+        </>}
+      </>}
+    </dialog>
+  </div>;
 }
 
 async function compressImage(file) {
