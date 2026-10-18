@@ -8,6 +8,7 @@ import { PEOPLE, budgetSummary, expenseStatus } from '../lib/domain.mjs';
 
 const tabs = [['timeline', '일정', 'calendar'], ['decisions', '결정할 것', 'check'], ['budget', '예산', 'wallet']];
 const active = list => list.filter(x => !x.archived);
+const defaultFilter = view => view === 'timeline' ? 'all' : 'active';
 const won = n => n.toLocaleString('ko-KR') + '원';
 const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 function days(value) { if (!value) return '날짜 미정'; const n = Math.round((Date.parse(value) - Date.parse(today())) / 86400000); return n === 0 ? 'D-Day' : n > 0 ? `D−${n}` : `D+${-n}`; }
@@ -22,7 +23,7 @@ export default function Planner() {
   const [snapshot, setSnapshot] = useState(null), [view, setView] = useState('timeline');
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), busyRef = useRef(false);
   const [status, setStatus] = useState(0), [error, setError] = useState(''), [message, setMessage] = useState('');
-  const [modal, setModal] = useState(null), [filter, setFilter] = useState('active'), [query, setQuery] = useState('');
+  const [modal, setModal] = useState(null), [filter, setFilter] = useState(defaultFilter('timeline')), [query, setQuery] = useState('');
   const [targetId, setTargetId] = useState(''), [clockTick, tick] = useState(0);
   const dialog = useRef(null), modalRef = useRef(null);
   modalRef.current = modal;
@@ -39,8 +40,8 @@ export default function Planner() {
     refresh();
     const route = () => {
       const [hash, target] = location.hash.slice(1).split('/');
-      setView(hash === 'inbox' ? 'decisions' : tabs.some(([id]) => id === hash) ? hash : 'timeline');
-      setFilter('active'); setQuery('');
+      const next = hash === 'inbox' ? 'decisions' : tabs.some(([id]) => id === hash) ? hash : 'timeline';
+      setView(next); setFilter(defaultFilter(next)); setQuery('');
       if (target) { try { setTargetId(decodeURIComponent(target)); } catch {} }
     };
     route();
@@ -59,7 +60,7 @@ export default function Planner() {
     if (record) setModal({ type: view === 'timeline' ? 'event.save' : view === 'budget' ? 'expense.save' : 'decision.save', record, version: snapshot.version });
     setTargetId('');
   }, [state, view, targetId, snapshot?.version]);
-  function go(next) { setModal(null); setView(next); setFilter('active'); setQuery(''); location.hash = next; window.scrollTo(0, 0); }
+  function go(next) { setModal(null); setView(next); setFilter(defaultFilter(next)); setQuery(''); location.hash = next; window.scrollTo(0, 0); }
   function open(type, record = {}, extra = {}) { setError(''); setModal({ type, record, version: snapshot.version, ...extra }); }
   async function logout() {
     try { const r = await fetch('/api/auth/logout', { method: 'POST' }); if (!r.ok) throw new Error(); setSnapshot(null); setModal(null); setStatus(401); setError(''); }
@@ -119,10 +120,10 @@ export default function Planner() {
   function timeline() {
     const events = state.events.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (filter === 'active' ? !e.done : filter === 'done' ? e.done : true) && matches(e));
     events.sort((a, b) => (a.date || '9999') .localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
-    const dated = active(state.events).filter(e => e.date && !e.done).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    const dated = active(state.events).filter(e => e.date).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     return <>
-      {dated.length > 1 && <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(e => <button type="button" key={e.id} onClick={() => open('event.save', e)}><time>{e.date.slice(5).replace('-', '.')}</time><span className={'simple-dot' + (e.id === 'wedding' ? ' wedding' : '')}>{e.id === 'wedding' ? '♡' : ''}</span><strong>{e.title}</strong></button>)}</div></section>}
-      {toolbar([['active', '남은 일정'], ['all', '전체'], ['done', '완료'], ['archived', '보관함']])}
+      {dated.length > 1 && <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(e => <button type="button" key={e.id} onClick={() => open('event.save', e)}><time>{e.date.slice(5).replace('-', '.')}</time><span className={'simple-dot' + (e.id === 'wedding' ? ' wedding' : '')}>{e.id === 'wedding' ? '♡' : ''}</span><strong>{e.done && '✓ '}{e.title}</strong></button>)}</div></section>}
+      {toolbar([['all', '전체'], ['active', '남은 일정'], ['done', '완료'], ['archived', '보관함']])}
       <section className="simple-list">{events.map((e, i) => <div key={e.id}>{(!i || events[i - 1].date?.slice(0, 7) !== e.date?.slice(0, 7)) && <h2 className="simple-month">{e.date ? `${e.date.slice(0, 4)}년 ${Number(e.date.slice(5, 7))}월` : '날짜 미정'}</h2>}<article className={'simple-row ' + (e.done ? 'is-done' : '')}>
         <label className="simple-complete"><span className="sr-only">{e.title} 완료</span><input type="checkbox" checked={e.done} disabled={busy || e.archived} onChange={() => command('event.done', { id: e.id, done: !e.done })} /></label>
         <button type="button" className="simple-record" onClick={() => open('event.save', e)}><span className="simple-day">{e.date ? e.date.slice(8) : '—'}<small>{e.date ? new Intl.DateTimeFormat('ko-KR', { weekday: 'short', timeZone: 'Asia/Seoul' }).format(new Date(e.date + 'T12:00:00+09:00')) : '미정'}</small></span><span className="simple-record-copy"><strong>{e.title}</strong><small>{[e.time, e.place].filter(Boolean).join(' · ') || '세부 일정은 나중에 정해도 돼요'}</small></span><Icon name="arrow" /></button>
