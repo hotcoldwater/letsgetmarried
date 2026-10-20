@@ -4,7 +4,7 @@ import Brand from './brand';
 import LoginForm from './login-form';
 import PushSettings from './push-settings';
 import PlannerFields, { decisionLabels, expenseLabels } from './planner-forms';
-import { PEOPLE, budgetSummary, expenseStatus, decisionBranch, decisionPath } from '../lib/domain.mjs';
+import { PEOPLE, budgetSummary, expenseStatus, decisionBranch, decisionPath, preparationTemplates } from '../lib/domain.mjs';
 
 const tabs = [['timeline', '일정', 'calendar'], ['decisions', '결정할 것', 'check'], ['budget', '예산', 'wallet']];
 const active = list => list.filter(x => !x.archived);
@@ -26,6 +26,7 @@ export default function Planner() {
   const [modal, setModal] = useState(null), [filter, setFilter] = useState(defaultFilter('timeline')), [query, setQuery] = useState('');
   const [targetId, setTargetId] = useState(''), [clockTick, tick] = useState(0);
   const [decisionParentId, setDecisionParentId] = useState(''), [deleteRequest, setDeleteRequest] = useState(null);
+  const [ordering, setOrdering] = useState(false);
   const dialog = useRef(null), modalRef = useRef(null), deleteConfirmation = useRef(null);
   modalRef.current = modal;
   const state = snapshot?.state;
@@ -42,7 +43,7 @@ export default function Planner() {
     const route = () => {
       const [hash, target] = location.hash.slice(1).split('/');
       const next = hash === 'inbox' ? 'decisions' : tabs.some(([id]) => id === hash) ? hash : 'timeline';
-      setView(next); setFilter(defaultFilter(next)); setQuery('');
+      setView(next); setFilter(defaultFilter(next)); setQuery(''); setOrdering(false);
       if (next !== 'decisions') setDecisionParentId('');
       if (target) { try { setTargetId(decodeURIComponent(target)); } catch {} }
     };
@@ -64,8 +65,8 @@ export default function Planner() {
     setTargetId('');
   }, [state, view, targetId, snapshot?.version]);
   useEffect(() => { if (state && decisionParentId && !state.decisions.some(d => d.id === decisionParentId)) setDecisionParentId(''); }, [state, decisionParentId]);
-  function go(next) { setModal(null); setDeleteRequest(null); setDecisionParentId(''); setView(next); setFilter(defaultFilter(next)); setQuery(''); location.hash = next; window.scrollTo(0, 0); }
-  function browseDecisions(parentId = '') { setModal(null); setDeleteRequest(null); setDecisionParentId(parentId); setView('decisions'); setFilter('all'); setQuery(''); location.hash = 'decisions'; window.scrollTo(0, 0); }
+  function go(next) { setModal(null); setDeleteRequest(null); setOrdering(false); setDecisionParentId(''); setView(next); setFilter(defaultFilter(next)); setQuery(''); location.hash = next; window.scrollTo(0, 0); }
+  function browseDecisions(parentId = '') { setModal(null); setDeleteRequest(null); setOrdering(false); setDecisionParentId(parentId); setView('decisions'); setFilter('all'); setQuery(''); location.hash = 'decisions'; window.scrollTo(0, 0); }
   function open(type, record = {}, extra = {}) { setError(''); setDeleteRequest(null); setModal({ type, record, version: snapshot.version, ...extra }); }
   async function logout() {
     try { const r = await fetch('/api/auth/logout', { method: 'POST' }); if (!r.ok) throw new Error(); setSnapshot(null); setModal(null); setStatus(401); setError(''); }
@@ -110,7 +111,7 @@ export default function Planner() {
         if (get('newCategory').trim()) categories.push({ title: get('newCategory'), included: f.has('newIncluded') });
         payload = { budget: number('budget'), scope: get('scope'), categories }; break;
       }
-      case 'templates.add': payload = { ids: f.getAll('templates') }; break;
+      case 'templates.add': payload = { ids: f.getAll('templates'), templates: preparationTemplates(state).map(t => ({ id: t.id, title: get('template-title-' + t.id), group: get('template-group-' + t.id) })) }; break;
       case 'candidate.save': payload = { id: r.id, decisionId: modal.decisionId, title: get('title'), quote: number('quote'), detail: get('detail'), link: get('link') }; break;
       case 'attachment.add': payload = { kind: modal.kind, targetId: r.id, title: get('title'), url: get('url') }; break;
       case 'upload': return upload(f);
@@ -122,7 +123,7 @@ export default function Planner() {
   }
   function matches(record, value = '') { return (record.title + ' ' + value).toLowerCase().includes(query.trim().toLowerCase()); }
   function toolbar(options) {
-    return <div className="simple-toolbar"><label className="simple-search"><span className="sr-only">검색</span><input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="이름으로 검색" /></label><label><span className="sr-only">표시할 항목</span><select value={filter} onChange={e => setFilter(e.target.value)}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label></div>;
+    return <div className="simple-toolbar"><label className="simple-search"><span className="sr-only">검색</span><input type="search" value={query} onChange={e => { setQuery(e.target.value); setOrdering(false); }} placeholder="이름으로 검색" /></label><label><span className="sr-only">표시할 항목</span><select value={filter} onChange={e => { setFilter(e.target.value); setOrdering(false); }}>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label></div>;
   }
   function empty(text) { return <div className="simple-empty"><Icon name={tabs.find(t => t[0] === view)[2]} /><p>{text}</p></div>; }
   function timeline() {
@@ -149,10 +150,11 @@ export default function Planner() {
       <form key={decisionParentId} className="simple-quick" onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; if (await command('decision.save', { title: new FormData(form).get('title'), status: 'todo', parentId: decisionParentId })) form.reset(); }}><label className="sr-only" htmlFor="quick-decision">{parent ? '하위 결정 빠르게 추가' : '결정할 것 빠르게 추가'}</label><input id="quick-decision" name="title" required maxLength={200} disabled={parent?.archived} placeholder={parent ? '이 안에서 정할 것을 한 줄로 남겨요' : '생각난 것을 한 줄로 남겨요'} /><button className="primary-button" type="submit" disabled={busy || parent?.archived}>추가</button></form>
       <div className="simple-progress-label"><span>{all.length ? `${all.length}개 중 ${done}개 완료` : '하나씩 정해 나가요'}</span>{!parent && <button type="button" className="text-button" onClick={() => open('templates.add')}>준비 항목 불러오기</button>}</div>
       {toolbar([['all', '전체'], ['active', '남은 결정'], ['todo', '미정'], ['doing', '진행 중'], ['done', '완료'], ['archived', '보관함']])}
-      <section className="simple-list">{list.map(d => { const children = active(state.decisions).filter(c => c.parentId === d.id); return <article className="simple-decision-card" key={d.id}><div className={'simple-row ' + (d.status === 'done' ? 'is-done' : '')}>
+      <div className="simple-order-toolbar"><span>{ordering ? '위·아래로 옮기면 바로 저장돼요.' : ''}</span><button type="button" className="text-button" aria-pressed={ordering} disabled={busy} onClick={() => { setOrdering(value => !value); setFilter('all'); setQuery(''); }}>{ordering ? '순서 편집 마치기' : '순서 편집'}</button></div>
+      <section className="simple-list">{list.map((d, index) => { const children = active(state.decisions).filter(c => c.parentId === d.id); return <article className="simple-decision-card" key={d.id}><div className={'simple-row ' + (d.status === 'done' ? 'is-done' : '')}>
         <button type="button" className="simple-record" onClick={() => open('decision.save', d)}><span className="simple-record-copy"><small>{searching ? decisionPath(state, d.id).slice(0, -1).map(p => p.title).join(' / ') || '전체 결정' : state.items.find(i => i.id === d.itemId)?.title || '준비할 것'}</small><strong>{d.title}</strong>{d.result && <p>{d.result}</p>}</span></button>
         <label className={'simple-status ' + d.status}><span className="sr-only">{d.title} 상태</span><select aria-label={`${d.title} 상태`} value={d.status} disabled={busy || d.archived} onChange={e => command('decision.status', { id: d.id, status: e.target.value })}>{Object.entries(decisionLabels).map(([v, l]) => <option value={v} key={v}>{l}</option>)}</select></label>
-      </div><button type="button" className="simple-child-link" aria-label={`${d.title} 하위 결정 ${children.length}개 열기`} onClick={() => browseDecisions(d.id)}><span>{children.length ? `하위 결정 ${children.length}개 · ${children.filter(c => c.status === 'done').length}개 완료` : '+ 하위 결정 추가하기'}</span><Icon name="arrow" /></button></article>; })}{!list.length && empty(query ? '검색 결과가 없어요.' : parent ? '이 결정에 필요한 세부 항목을 위에서 추가해 보세요.' : '정할 것이 떠오르면 바로 적어두세요.')}</section>
+      </div>{ordering && <div className="simple-order-controls"><span>{index + 1}번째</span><button type="button" aria-label={`${d.title} 위로 이동`} disabled={busy || index === 0} onClick={() => command('decision.move', { id: d.id, direction: 'up' })}>↑ 위로</button><button type="button" aria-label={`${d.title} 아래로 이동`} disabled={busy || index === list.length - 1} onClick={() => command('decision.move', { id: d.id, direction: 'down' })}>↓ 아래로</button></div>}<button type="button" className="simple-child-link" aria-label={`${d.title} 하위 결정 ${children.length}개 열기`} onClick={() => browseDecisions(d.id)}><span>{children.length ? `하위 결정 ${children.length}개 · ${children.filter(c => c.status === 'done').length}개 완료` : '+ 하위 결정 추가하기'}</span><Icon name="arrow" /></button></article>; })}{!list.length && empty(query ? '검색 결과가 없어요.' : parent ? '이 결정에 필요한 세부 항목을 위에서 추가해 보세요.' : '정할 것이 떠오르면 바로 적어두세요.')}</section>
     </>;
   }
   function budget() {
@@ -217,7 +219,7 @@ export default function Planner() {
     <dialog className="simple-dialog" ref={dialog} aria-labelledby="simple-dialog-title" onCancel={e => { if (busy) e.preventDefault(); else setModal(null); }} onClose={() => { if (!busy) setModal(null); }}>
       {modal && <><div className="simple-dialog-head"><h2 id="simple-dialog-title">{formTitles[modal.type]}</h2><button type="button" className="simple-settings" aria-label="닫기" disabled={busy} onClick={() => setModal(null)}><Icon name="close" /></button></div>
         {modal.type === 'settings' ? <div className="simple-settings-body"><p>{PEOPLE[snapshot.user.role]} 님으로 로그인했어요.</p><div className="simple-actions"><a href="/account" className="secondary-button">비밀번호 변경</a><Button secondary onClick={logout}>로그아웃</Button></div><details className="simple-more"><summary>휴대폰 알림</summary><PushSettings publicKey={snapshot.pushKey} /></details>{state.attachments.length > 0 && <details className="simple-more"><summary>저장된 자료</summary><div className="simple-files">{state.attachments.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.title} ↗</a>)}</div></details>}</div> : <>
-          <form className="live-form simple-form" key={modal.type + (modal.record.id || '') + (modal.record.parentId || '')} onSubmit={submit}><fieldset disabled={busy}><PlannerFields modal={modal} state={state} /></fieldset>{error && <p className="simple-error" role="alert">{error}</p>}<button type="submit" className="primary-button simple-save" disabled={busy}>{busy ? '저장 중…' : modal.type === 'templates.add' ? '선택한 항목 추가' : '저장'}</button></form>{extras()}{deletion()}
+          <form className="live-form simple-form" key={modal.type + (modal.record.id || '') + (modal.record.parentId || '')} onSubmit={submit}><fieldset disabled={busy}><PlannerFields modal={modal} state={state} /></fieldset>{error && <p className="simple-error" role="alert">{error}</p>}<button type="submit" className="primary-button simple-save" disabled={busy}>{busy ? '저장 중…' : modal.type === 'templates.add' ? '선택·수정 내용 저장' : '저장'}</button></form>{extras()}{deletion()}
         </>}
       </>}
     </dialog>
