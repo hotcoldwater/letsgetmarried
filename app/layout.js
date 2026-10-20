@@ -3,6 +3,7 @@ import '../app.css';
 import './live.css';
 import './brand.css';
 import './simple.css';
+import './inline.css';
 export const metadata = {
   title: 'letsgetmarried · 성현과 지윤의 결혼 준비',
   applicationName: 'letsgetmarried',
