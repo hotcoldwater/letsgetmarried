@@ -159,8 +159,10 @@ export default function Planner() {
   function timeline() {
     const events = state.events.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (filter === 'active' ? !e.done : filter === 'done' ? e.done : true) && searchableText(e, state, 'event').includes(query.trim().toLowerCase()));
     events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
+    const dated = state.events.filter(e => !e.archived && e.date).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
     return <>
       <p className="inline-section-intro">날짜와 장소부터 메모, 준비물까지 함께 확인해요.</p>
+      {dated.length > 1 && <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(e => <button type="button" key={e.id} aria-label={`${e.title}, ${e.date}${e.done ? ', 완료' : ''} 상세로 이동`} onClick={() => { setFilter('all'); setQuery(''); setTargetId(e.id); }}><time dateTime={e.date}>{e.date.slice(5).replace('-', '.')}</time><span aria-hidden="true" className={'simple-dot' + (e.id === 'wedding' ? ' wedding' : '')}>{e.id === 'wedding' ? '♡' : ''}</span><strong>{e.done && '✓ '}{e.title}</strong></button>)}</div></section>}
       {toolbar([['all', '전체 일정'], ['active', '남은 일정'], ['done', '완료'], ['archived', '보관함']], events, 'event')}
       <section className="inline-record-list">{events.map((e, i) => <div key={e.id}>{(!i || events[i - 1].date?.slice(0, 7) !== e.date?.slice(0, 7)) && <h2 className="inline-month">{e.date ? `${e.date.slice(0, 4)}년 ${Number(e.date.slice(5, 7))}월` : '날짜 미정'}</h2>}<EventCard record={e} /></div>)}{!events.length && empty(query ? '검색 결과가 없어요.' : '여기에 일정이 표시돼요. 새 일정을 추가해 보세요.')}</section>
     </>;
