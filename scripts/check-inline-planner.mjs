@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applyCommand, initialState } from '../lib/domain.mjs';
-import { createWorkspaceQueue, fieldCommand, fieldValue, parseField, visibleDecisions } from '../lib/inline-planner.mjs';
+import { applyCommand, budgetSummary, initialState } from '../lib/domain.mjs';
+import { createWorkspaceQueue, fieldCommand, fieldValue, parseField, visibleDecisions, visibleExpenseGroups } from '../lib/inline-planner.mjs';
+import { formatMoneyEdit, formatMoneyInput, parseMoneyInput } from '../lib/money-input.mjs';
 
 let serial = 0;
 const apply = (state, command) => applyCommand(state, command, 'groom', { id: `test-${++serial}`, now: '2026-10-20T12:00:00.000Z' }).state;
@@ -150,4 +151,91 @@ test('unchanged values do not send another write or notification', () => {
   const { state, parent } = fixture();
   assert.equal(fieldCommand(state, { kind: 'decision', id: parent, field: 'title' }, ' 스드메 ', '스드메'), null);
   assert.equal(fieldValue(state, { kind: 'event', id: 'wedding', field: 'done' }), false);
+});
+
+test('formatted money round-trips through inline saves and form submissions without changing its value', () => {
+  for (const amount of [0, 999, 1000, 3500000, 10000000000]) {
+    const display = formatMoneyInput(amount);
+    assert.equal(display, amount.toLocaleString('ko-KR'));
+    assert.equal(parseMoneyInput(display), amount);
+    assert.equal(parseField(display, { type: 'number' }), amount);
+  }
+  assert.equal(formatMoneyInput(null), '');
+  assert.equal(formatMoneyInput('0001200'), '1,200');
+  assert.equal(parseMoneyInput('', { optional: true }), null);
+  for (const value of ['', '-1,000', '1.5', '1e3', '10,000,000,001', '100원']) assert.throws(() => parseMoneyInput(value));
+  assert.equal(formatMoneyInput('-1,000'), '-1,000');
+});
+
+test('grouping money keeps the caret next to edited digits including selection replacement and comma deletion', () => {
+  assert.deepEqual(formatMoneyEdit('1000', 4), { value: '1,000', start: 5, end: 5 });
+  assert.deepEqual(formatMoneyEdit('19,234', 2), { value: '19,234', start: 2, end: 2 });
+  assert.deepEqual(formatMoneyEdit('1,0000', 3), { value: '10,000', start: 2, end: 2 });
+  assert.deepEqual(formatMoneyEdit('1000', 1), { value: '1,000', start: 1, end: 1 });
+  assert.deepEqual(formatMoneyEdit('012', 1), { value: '12', start: 0, end: 0 });
+  assert.deepEqual(formatMoneyEdit('3500000', 1, 4), { value: '3,500,000', start: 1, end: 5 });
+  assert.deepEqual(formatMoneyEdit('', 0), { value: '', start: 0, end: 0 });
+});
+
+function budgetFixture() {
+  let state = initialState();
+  for (const [title, categoryId, amount, paid, status] of [
+    ['대관료', 'venue', 3000000, 1000000, 'confirmed'],
+    ['식대', 'venue', 8000000, 0, 'estimated'],
+    ['드레스', 'styling', 500000, 500000, 'paid'],
+    ['항공권', 'honeymoon', 2000000, 0, 'estimated'],
+  ]) state = apply(state, { type: 'expense.save', payload: { title, categoryId, amount, paid, status } });
+  return state;
+}
+
+test('budget groups preserve empty categories, show each expense once, and search category names', () => {
+  const state = budgetFixture(), groups = visibleExpenseGroups(state);
+  assert.deepEqual(groups.map(g => g.id), state.settings.categories.map(c => c.id));
+  assert.deepEqual(groups.flatMap(g => g.expenses.map(e => e.title)), ['대관료', '식대', '드레스', '항공권']);
+  assert.deepEqual(visibleExpenseGroups(state, '예식장')[0].expenses.map(e => e.title), ['대관료', '식대']);
+  assert.equal(visibleExpenseGroups(state, '대관')[0].id, 'venue');
+  assert.equal(visibleExpenseGroups(state, '없음').length, 0);
+  assert.equal(visibleExpenseGroups(state, '예복')[0].expenses.length, 0);
+});
+
+test('moving an expense between categories transfers its totals once and preserves paid amounts', () => {
+  let state = budgetFixture();
+  const before = budgetSummary(state), expense = state.expenses[0];
+  state = apply(state, fieldCommand(state, { kind: 'expense', id: expense.id, field: 'categoryId' }, 'styling', 'venue'));
+  const after = budgetSummary(state);
+  assert.equal(after.total, before.total);
+  assert.equal(after.paid, before.paid);
+  assert.equal(after.rows.find(c => c.id === 'venue').total, 8000000);
+  assert.equal(after.rows.find(c => c.id === 'venue').paid, 0);
+  assert.equal(after.rows.find(c => c.id === 'styling').total, 3500000);
+  assert.equal(after.rows.find(c => c.id === 'styling').paid, 1500000);
+  assert.equal(visibleExpenseGroups(state).flatMap(g => g.expenses).filter(e => e.id === expense.id).length, 1);
+});
+
+test('status filters and archives leave overall totals intact and excluded groups stay available', () => {
+  let state = budgetFixture();
+  state = apply(state, { type: 'expense.archive', payload: { id: state.expenses[1].id, archived: true } });
+  const summary = budgetSummary(state);
+  assert.equal(summary.total, 3500000);
+  assert.equal(summary.paid, 1500000);
+  assert.equal(summary.rows.find(c => c.id === 'honeymoon').total, 2000000);
+  assert.equal(visibleExpenseGroups(state, '', 'confirmed')[0].expenses[0].title, '대관료');
+  assert.equal(visibleExpenseGroups(state, '', 'paid')[0].expenses[0].title, '드레스');
+  assert.equal(visibleExpenseGroups(state, '', 'archived')[0].expenses[0].title, '식대');
+  assert.equal(visibleExpenseGroups(state).flatMap(g => g.expenses).length, 3);
+  assert.deepEqual(budgetSummary(state), summary);
+});
+
+test('a formatted quote stays out of the budget and formatted expense edits preserve partial payments', () => {
+  let state = budgetFixture();
+  state = apply(state, { type: 'decision.save', payload: { title: '후보 비교' } });
+  const decisionId = state.decisions.at(-1).id, before = budgetSummary(state);
+  state = apply(state, { type: 'candidate.save', payload: { decisionId, title: '후보 A', quote: null } });
+  const candidate = state.decisions.at(-1).options[0];
+  state = apply(state, fieldCommand(state, { kind: 'candidate', ownerId: decisionId, id: candidate.id, field: 'quote', type: 'number', optional: true }, '3,500,000', null));
+  assert.deepEqual(budgetSummary(state), before);
+  state = apply(state, fieldCommand(state, { kind: 'expense', id: state.expenses[0].id, field: 'amount', type: 'number' }, '3,500,000', 3000000));
+  assert.equal(state.expenses[0].amount, 3500000);
+  assert.equal(state.expenses[0].paid, 1000000);
+  assert.equal(budgetSummary(state).total, before.total + 500000);
 });
