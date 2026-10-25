@@ -30,7 +30,7 @@ const hooks = registerHooks({
     return next(url, context);
   },
 });
-const { ScheduleTable, DecisionTable } = await import('../app/planner-table.jsx');
+const { ScheduleTimeline, ScheduleTable, DecisionTable } = await import('../app/planner-table.jsx');
 const { InlineContext } = await import('../app/inline-fields.jsx');
 const { default: PlannerFields } = await import('../app/planner-forms.jsx');
 hooks.deregister();
@@ -50,6 +50,27 @@ function render(state, component, props, drafts = {}) {
   const context = { state, saves: { drafts }, queue: {}, open() {}, remove() {}, storageEnabled: false };
   return renderToStaticMarkup(h(InlineContext.Provider, { value: context }, h(component, { expanded: {}, sort: { key: 'date', direction: 'asc' }, toggle() {}, onSort() {}, ...props })));
 }
+
+test('the original timeline keeps all dated events in order, completion marks, and the wedding milestone', () => {
+  const state = { ...initialState(), events: [
+    { id: 'wedding', title: '결혼식', date: '2027-09-25', time: '14:00' },
+    { id: 'late', title: '오후 피팅', date: '2026-11-14', time: '15:00' },
+    { id: 'undated', title: '날짜 없는 일정', date: '' },
+    { id: 'archived', title: '보관한 일정', date: '2026-10-01', archived: true },
+    { id: 'early', title: '오전 투어', date: '2026-11-14', time: '10:00', done: true },
+  ] };
+  const html = render(state, ScheduleTimeline, { onSelect() {} });
+  assert.match(html, /aria-label="날짜순 일정 흐름"/);
+  assert.ok(html.indexOf('오전 투어') < html.indexOf('오후 피팅'));
+  assert.ok(html.indexOf('오후 피팅') < html.indexOf('결혼식'));
+  assert.match(html, /오전 투어, 2026-11-14, 완료 상세로 이동/);
+  assert.match(html, /✓ 오전 투어/);
+  assert.match(html, /class="simple-dot wedding">♡/);
+  assert.doesNotMatch(html, /날짜 없는 일정|보관한 일정/);
+  assert.equal((html.match(/<button/g) || []).length, 3);
+  assert.deepEqual(state.events.map(event => event.id), ['wedding', 'late', 'undated', 'archived', 'early']);
+  assert.equal(render({ ...state, events: state.events.slice(0, 1) }, ScheduleTimeline, { onSelect() {} }), '');
+});
 
 test('the schedule overview renders compact table cells instead of all detail forms', () => {
   const { state } = fixture(), html = render(state, ScheduleTable, { records: visibleEvents(state) });
