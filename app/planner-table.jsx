@@ -70,6 +70,17 @@ function RowTitle({ record, kind, expanded, toggle, depth = 0, context = false, 
 
 const categoryOptions = state => [['', '미분류'], ...state.items.map(item => [item.id, item.title])];
 
+export function ScheduleTimeline({ onSelect }) {
+  const { state } = useInline();
+  const dated = state.events.filter(event => !event.archived && event.date).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  if (dated.length < 2) return null;
+  return <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(event => <button type="button" key={event.id} aria-label={`${event.title}, ${event.date}${event.done ? ', 완료' : ''} 상세로 이동`} onClick={() => onSelect(event.id)}>
+    <time dateTime={event.date}>{event.date.slice(5).replace('-', '.')}</time>
+    <span aria-hidden="true" className={'simple-dot' + (event.id === 'wedding' ? ' wedding' : '')}>{event.id === 'wedding' ? '♡' : ''}</span>
+    <strong>{event.done && '✓ '}{event.title}</strong>
+  </button>)}</div></section>;
+}
+
 export function ScheduleTable({ records, sort, onSort, expanded, toggle, scrollMemory }) {
   const { state } = useInline();
   return <TableFrame kind="event" columns={eventColumns} sort={sort} onSort={onSort} scrollMemory={scrollMemory}>
