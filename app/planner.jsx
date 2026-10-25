@@ -5,7 +5,7 @@ import LoginForm from './login-form';
 import PushSettings from './push-settings';
 import PlannerFields from './planner-forms';
 import PlanningCategories from './planning-categories';
-import { ScheduleTable, DecisionTable, PlanningFilters } from './planner-table';
+import { ScheduleTimeline, ScheduleTable, DecisionTable, PlanningFilters } from './planner-table';
 import { PEOPLE, budgetSummary, decisionBranch, preparationTemplates } from '../lib/domain.mjs';
 import { createWorkspaceQueue, defaultPlannerViews, fieldRecord, recordAnchor, visibleDecisions, visibleEvents, visibleExpenseGroups } from '../lib/inline-planner.mjs';
 import { parseMoneyInput } from '../lib/money-input.mjs';
@@ -192,6 +192,7 @@ export default function Planner() {
   function timeline() {
     const events = visibleEvents(state, query, filter, category, sort);
     return <>
+      <ScheduleTimeline onSelect={id => { changeOptions({ filter: 'all', query: '', category: 'all' }); setTargetId(id); }} />
       <PlanningFilters view={view} options={options} change={changeOptions} count={events.length} total={state.events.filter(e => filter === 'archived' ? e.archived : !e.archived).length} />
       <ScheduleTable records={events} sort={sort} onSort={sort => changeOptions({ sort })} expanded={expandedRows} toggle={toggleRow} scrollMemory={tableScrollPositions} />
     </>;
