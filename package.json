@@ -13,7 +13,7 @@
     "setup:local": "node scripts/setup-local.mjs",
     "doctor": "node --env-file-if-exists=.env.local scripts/doctor.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate.mjs",
-    "test": "node scripts/check-model.js && node scripts/check-wedding.js && node scripts/check-domain.mjs && node scripts/check-auth.mjs && node --test scripts/check-inline-planner.mjs",
+    "test": "node scripts/check-model.js && node scripts/check-wedding.js && node scripts/check-domain.mjs && node scripts/check-auth.mjs && node --test scripts/check-inline-planner.mjs scripts/check-planning-tables.mjs scripts/check-table-render.mjs",
     "test:db": "node --env-file=.env.local scripts/check-db.mjs",
     "notify:run": "node --env-file=.env.local scripts/run-reminders.mjs"
   },
