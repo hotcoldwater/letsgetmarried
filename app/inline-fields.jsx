@@ -1,6 +1,8 @@
 'use client';
 import { createContext, useContext, useId, useLayoutEffect, useRef, useState } from 'react';
 import { fieldKey, fieldValue } from '../lib/inline-planner.mjs';
+import { formatMoneyInput } from '../lib/money-input.mjs';
+import MoneyInput from './money-input';
 
 export const InlineContext = createContext(null);
 export const useInline = () => useContext(InlineContext);
@@ -16,26 +18,26 @@ export function EditableField({ kind, record, ownerId, field, label, options, mu
       input.current.style.height = input.current.scrollHeight + 'px';
     }
   }, [value, multiline]);
-  const change = event => {
-    const next = props.type === 'checkbox' ? event.target.checked : event.target.value;
+  const changeValue = next => {
     const updatedKey = saves.edit(config, next);
     if (options || props.type === 'checkbox') saves.save(updatedKey);
   };
   const common = {
     ...props, ref: input, id, disabled, value: props.type === 'checkbox' ? undefined : value,
     checked: props.type === 'checkbox' ? !!value : undefined,
-    onChange: change,
-    onBlur: () => { if (!composing.current) saves.save(key); },
+    onChange: event => changeValue(props.type === 'checkbox' ? event.target.checked : event.target.value),
+    onBlur: () => { if (!composing.current && draft?.status !== 'error') saves.save(key); },
     onCompositionStart: () => { composing.current = true; },
     onCompositionEnd: () => { composing.current = false; },
     onKeyDown: event => {
-      if (event.key === 'Enter' && !multiline && !event.nativeEvent.isComposing && !composing.current) { event.preventDefault(); event.currentTarget.blur(); }
+      if (event.key === 'Enter' && (!multiline || event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing && !composing.current) { event.preventDefault(); event.currentTarget.blur(); }
     },
     'aria-invalid': draft?.status === 'error' || undefined,
     'aria-describedby': draft?.status === 'error' ? `${id}-error` : undefined,
   };
   const control = options ? <select {...common}>{options.map(([v, text]) => <option value={v} key={v}>{text}</option>)}</select>
     : multiline ? <textarea {...common} rows={1} />
+      : props.type === 'number' ? <MoneyInput {...common} onValueChange={changeValue} />
       : <input {...common} />;
   return <div className={`inline-field ${className} ${props.type === 'checkbox' ? 'inline-check-field' : ''}`}>
     <label htmlFor={id}>{props.type === 'checkbox' && control}<span>{label}</span></label>
@@ -43,7 +45,7 @@ export function EditableField({ kind, record, ownerId, field, label, options, mu
     {draft?.status && <span className={`inline-field-status ${draft.status}`} role="status">{draft.status === 'saving' ? '저장 중…' : draft.status === 'editing' ? '입력 중' : draft.status === 'saved' ? '저장 완료' : '저장하지 못했어요'}</span>}
     {draft?.status === 'error' && <div className="inline-field-error" id={`${id}-error`} role="alert">
       <p>{draft.error}</p>
-      {draft.conflict && <p>최신 내용: {String(draft.currentValue || '(비어 있음)')}</p>}
+      {draft.conflict && <p>최신 내용: {draft.currentValue == null || draft.currentValue === '' ? '(비어 있음)' : props.type === 'number' ? `${formatMoneyInput(draft.currentValue)}원` : String(draft.currentValue)}</p>}
       <div><button type="button" onClick={() => saves.retry(key)}>{draft.conflict ? '내 내용 저장' : '다시 저장'}</button><button type="button" onClick={() => saves.discard(key)}>최신 내용 사용</button></div>
     </div>}
   </div>;

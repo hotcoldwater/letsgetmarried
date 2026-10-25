@@ -54,7 +54,7 @@ function Candidate({ record, decision }) {
   </article>;
 }
 
-export function DecisionCard({ record: d, depth, context, ordering }) {
+export function DecisionCard({ record: d, depth, context, ordering, embedded = false }) {
   const { state, queue } = useInline();
   const [addingCandidate, setAddingCandidate] = useState(false);
   const path = decisionPath(state, d.id), descendants = new Set(decisionBranch(state, d.id).map(child => child.id));
@@ -62,17 +62,17 @@ export function DecisionCard({ record: d, depth, context, ordering }) {
   const index = siblings.findIndex(other => other.id === d.id);
   const children = state.decisions.filter(child => !child.archived && child.parentId === d.id);
   const props = { kind: 'decision', record: d, disabled: !!d.archived };
-  if (context) return <article id={recordAnchor('decision', d.id)} tabIndex={-1} className={`inline-context-card depth-${Math.min(depth, 2)}`} aria-label={`${d.title} 상위 항목`}>
+  if (context) return <article id={embedded ? undefined : recordAnchor('decision', d.id)} tabIndex={-1} className={`inline-context-card depth-${Math.min(depth, 2)}`} aria-label={`${d.title} 상위 항목`}>
     <span>상위 항목{d.archived && ' · 보관됨'}</span><strong>{d.title}</strong><small>{decisionLabels[d.status]}</small>
     {d.archived && <Action action={() => queue.command({ type: 'decision.archive', payload: { id: d.id, archived: false } })}>복원</Action>}
   </article>;
-  return <article id={recordAnchor('decision', d.id)} tabIndex={-1} className={`inline-card inline-decision depth-${Math.min(depth, 2)} ${d.status === 'done' ? 'record-done' : ''} ${context ? 'context-record' : ''}`} aria-label={d.title}>
+  return <article id={embedded ? undefined : recordAnchor('decision', d.id)} tabIndex={embedded ? undefined : -1} className={`inline-card inline-decision depth-${Math.min(depth, 2)} ${d.status === 'done' ? 'record-done' : ''} ${context ? 'context-record' : ''}`} aria-label={`${d.title}${embedded ? ' 상세' : ''}`}>
     <div className="inline-card-kicker"><span>{depth ? path.slice(0, -1).map(parent => parent.title).join(' / ') : state.items.find(i => i.id === d.itemId)?.title || '결정할 것'}{d.archived && ' · 보관됨'}</span>{context && <span>상위 항목</span>}{children.length > 0 && <span>하위 {children.length}개 · 완료 {children.filter(c => c.status === 'done').length}개</span>}</div>
-    <div className="inline-card-heading"><Field {...props} field="title" label="결정할 것" required maxLength={200} multiline className="inline-title" /><Field {...props} field="status" label="상태" options={Object.entries(decisionLabels)} className={`inline-status ${d.status}`} /></div>
+    {!embedded && <div className="inline-card-heading"><Field {...props} field="title" label="결정할 것" required maxLength={200} multiline className="inline-title" /><Field {...props} field="status" label="상태" options={Object.entries(decisionLabels)} className={`inline-status ${d.status}`} /></div>}
     <div className="inline-grid inline-notes"><OptionalField {...props} field="result" label="정한 내용" multiline maxLength={2000} /><OptionalField {...props} field="memo" label="참고 메모" multiline maxLength={5000} /></div>
     <div className="inline-grid inline-associations">
       <OptionalField {...props} field="parentId" label="상위 결정" options={[['', '없음 · 최상위 결정'], ...state.decisions.filter(p => !descendants.has(p.id) && (!p.archived || p.id === d.parentId)).map(p => [p.id, decisionPath(state, p.id).map(v => v.title).join(' / ')])]} />
-      <OptionalField {...props} field="itemId" label="분류" options={[['', '분류 없음'], ...state.items.map(item => [item.id, item.title])]} />
+      {!embedded && <OptionalField {...props} field="itemId" label="카테고리" options={[['', '미분류'], ...state.items.map(item => [item.id, item.title])]} />}
     </div>
     {(d.options?.length > 0 || addingCandidate) && <section className="inline-candidates"><div className="inline-section-heading"><h3>후보 비교</h3><span>견적은 예산에 자동 합산되지 않아요</span></div><div className="inline-candidate-grid">{d.options?.map(option => <Candidate key={option.id} record={option} decision={d} />)}</div></section>}
     {addingCandidate && <QuickAdd label={`${d.title} 후보 추가`} placeholder="후보 이름을 입력하세요" compact disabled={d.archived} create={title => queue.command({ type: 'candidate.save', payload: { decisionId: d.id, title, quote: null } })} />}
@@ -83,13 +83,15 @@ export function DecisionCard({ record: d, depth, context, ordering }) {
   </article>;
 }
 
-export function EventCard({ record: e }) {
-  const { queue } = useInline(), [importing, setImporting] = useState(false), [error, setError] = useState('');
+export function EventCard({ record: e, embedded = false }) {
+  const { state, queue } = useInline(), [importing, setImporting] = useState(false), [error, setError] = useState('');
   const tasks = (e.tasks || []).filter(t => !t.archived), props = { kind: 'event', record: e, disabled: !!e.archived };
-  return <article id={recordAnchor('event', e.id)} tabIndex={-1} className={`inline-card ${e.done ? 'record-done' : ''}`} aria-label={e.title}>
+  return <article id={embedded ? undefined : recordAnchor('event', e.id)} tabIndex={embedded ? undefined : -1} className={`inline-card ${e.done ? 'record-done' : ''}`} aria-label={`${e.title}${embedded ? ' 상세' : ''}`}>
+    {!embedded && <>
     <div className="inline-card-kicker"><span>{e.date ? `${e.date.replaceAll('-', '.')} · ${new Intl.DateTimeFormat('ko-KR', { weekday: 'long', timeZone: 'Asia/Seoul' }).format(new Date(e.date + 'T12:00:00+09:00'))}` : '날짜 미정'}{e.archived && ' · 보관됨'}</span><Field {...props} field="done" label="일정 완료" type="checkbox" /></div>
     <Field {...props} field="title" label="일정 이름" required maxLength={200} multiline className="inline-title" />
     <div className="inline-event-meta"><Field {...props} field="date" label="날짜" type="date" /><Field {...props} field="time" label="시간" type="time" /><Field {...props} field="place" label="장소" multiline maxLength={300} placeholder="아직 정하지 않았어요" /></div>
+    </>}
     <OptionalField {...props} field="memo" label="메모 · 챙길 것" multiline maxLength={5000} />
     <section className="inline-tasks"><div className="inline-section-heading"><h3>준비물</h3><span>{tasks.length ? `${tasks.filter(t => t.done).length} / ${tasks.length}개 완료` : '필요한 것을 적어두세요'}</span></div>
       <div className="inline-task-list">{tasks.map(task => <div className={`inline-task ${task.done ? 'task-done' : ''}`} key={task.id}>
@@ -111,31 +113,43 @@ export function EventCard({ record: e }) {
       {error && <p className="inline-field-error" role="alert">{error}</p>}
     </section>
     <Attachments kind="event" record={e} disabled={e.archived} /><RecordActions kind="event" record={e} />
+    {e.itemId && state.attachments.some(a => a.kind === 'item' && a.targetId === e.itemId) && <Attachments kind="item" record={state.items.find(item => item.id === e.itemId)} />}
   </article>;
 }
 
 export function ExpenseCard({ record: e }) {
   const { state } = useInline(), props = { kind: 'expense', record: e, disabled: !!e.archived };
   return <article id={recordAnchor('expense', e.id)} tabIndex={-1} className="inline-card inline-expense" aria-label={e.title}>
-    <div className="inline-card-kicker"><span>{state.settings.categories.find(c => c.id === e.categoryId)?.title}{e.archived && ' · 보관됨'}</span><strong>남은 금액 {won(e.amount - e.paid)}</strong></div>
-    <div className="inline-card-heading"><Field {...props} field="title" label="지출 이름" required maxLength={200} multiline className="inline-title" /><Field {...props} field="status" label="지출 상태" options={Object.entries(expenseLabels)} className={`inline-status ${expenseStatus(e)}`} /></div>
-    <div className="inline-grid inline-money"><Field {...props} field="amount" label="총금액 (원)" type="number" required min="0" max="10000000000" step="1" /><Field {...props} field="paid" label="이미 지급한 금액 (원)" type="number" required min="0" max="10000000000" step="1" /></div>
-    <div className="inline-grid"><Field {...props} field="categoryId" label="분류" options={state.settings.categories.map(c => [c.id, c.title + (c.included ? '' : ' · 예산 제외')])} /><Field {...props} field="dueDate" label="남은 금액 결제 예정일" type="date" /></div>
+    {e.archived && <div className="inline-card-kicker"><span>보관됨 · 예산 합계에서 제외</span></div>}
+    <div className="inline-card-heading"><Field {...props} field="title" label="세부항목 이름" required maxLength={200} multiline className="inline-title" /><Field {...props} field="status" label="지출 상태" options={Object.entries(expenseLabels)} className={`inline-status ${expenseStatus(e)}`} /></div>
+    <div className="inline-grid inline-money"><Field {...props} field="amount" label="총금액 (원)" type="number" required min="0" max="10000000000" step="1" /><Field {...props} field="paid" label="지급한 금액 (원)" type="number" required min="0" max="10000000000" step="1" /><div className="inline-money-balance"><span>남은 결제금액</span><output aria-label={`${e.title} 남은 결제금액`}>{won(e.amount - e.paid)}</output></div></div>
+    <div className="inline-grid inline-expense-meta"><Field {...props} field="categoryId" label="대분류" options={state.settings.categories.map(c => [c.id, c.title + (c.included ? '' : ' · 예산 제외')])} /><Field {...props} field="dueDate" label="남은 결제금액 예정일" type="date" /></div>
     <p className="inline-hint">총금액에는 계약금과 잔금이 포함돼요. ‘지급 완료’는 전액 지급으로 반영해요.</p>
     <div className="inline-grid"><OptionalField {...props} field="detail" label="계약 내용 · 추가금" multiline maxLength={2000} /><OptionalField {...props} field="decisionId" label="연결된 결정" options={[['', '연결하지 않음'], ...state.decisions.filter(d => (!d.archived && d.status === 'done') || d.id === e.source?.decisionId).map(d => [d.id, decisionPath(state, d.id).map(p => p.title).join(' / ')])]} /></div>
     <Attachments kind="expense" record={e} disabled={e.archived} /><RecordActions kind="expense" record={e} />
   </article>;
 }
 
-export function BudgetCategories({ summary }) {
-  const { queue } = useInline(), [adding, setAdding] = useState(false);
-  return <section className="inline-categories" aria-label="분류별 예산">
-    <div className="inline-section-heading"><h2>분류별 합계</h2><button type="button" className="text-button" onClick={() => setAdding(v => !v)}>{adding ? '추가 닫기' : '+ 분류 추가'}</button></div>
-    {adding && <QuickAdd label="새 예산 분류" placeholder="분류 이름" maxLength={60} create={title => queue.command(state => ({ type: 'budget.save', payload: { ...state.settings, categories: [...state.settings.categories, { title, included: true }] } }))} />}
-    <div className="inline-category-grid">{summary.rows.map(c => <article id={recordAnchor('category', c.id)} tabIndex={-1} className={`inline-category ${c.included ? '' : 'excluded'}`} key={c.id}>
-      <Field kind="category" record={c} field="title" label="분류 이름" multiline required maxLength={60} />
-      <strong>{won(c.total)}</strong><div className="inline-category-values"><span>지급 {won(c.paid)}</span><span>잔액 {won(c.committed + c.estimated)}</span></div>
-      <Field kind="category" record={c} field="included" label="전체 예산에 포함" type="checkbox" />
-    </article>)}</div>
+export function BudgetCategories({ summary, groups, filtered = false, archived = false, onCategoryAdded }) {
+  const { queue, open } = useInline(), [adding, setAdding] = useState(false);
+  return <section className="inline-categories" aria-label="대분류별 예산">
+    <div className="inline-section-heading"><h2>{archived ? '보관한 세부항목' : '대분류별 세부항목'}</h2><button type="button" className="text-button" onClick={() => setAdding(v => !v)}>{adding ? '추가 닫기' : '+ 대분류 추가'}</button></div>
+    {adding && <QuickAdd label="새 예산 대분류" placeholder="예: 혼주 준비, 신혼집" maxLength={60} create={async title => {
+      const saved = await queue.command(state => ({ type: 'budget.save', payload: { ...state.settings, categories: [...state.settings.categories, { title, included: true }] } }));
+      setAdding(false); onCategoryAdded?.(saved.state.settings.categories.at(-1).id);
+    }} />}
+    {filtered && <p className="inline-hint">예산 합계는 검색·상태 필터와 관계없이 보관하지 않은 전체 항목 기준이에요.</p>}
+    {!groups.length && <p className="simple-empty">{archived ? '조건에 맞는 보관 항목이 없어요.' : '조건에 맞는 세부항목이 없어요.'}</p>}
+    <div className="inline-budget-groups">{groups.map(group => {
+      const c = summary.rows.find(row => row.id === group.id);
+      return <section id={recordAnchor('category', c.id)} tabIndex={-1} className={`inline-budget-category ${c.included ? '' : 'excluded'}`} key={c.id} aria-label={`${c.title} 세부항목`}>
+        <div className="inline-budget-category-header">
+          <div className="inline-budget-category-title"><Field kind="category" record={c} field="title" label="대분류 이름" multiline required maxLength={60} className="inline-title" /><span>{filtered ? '표시 ' : ''}{group.expenses.length}개 항목{!c.included && ' · 전체 예산 제외'}</span></div>
+          {!archived && <><dl className="inline-category-totals"><div><dt>총금액</dt><dd>{won(c.total)}</dd></div><div><dt>지급한 금액</dt><dd>{won(c.paid)}</dd></div><div><dt>남은 결제금액</dt><dd>{won(c.committed + c.estimated)}</dd></div></dl><Field kind="category" record={c} field="included" label="전체 예산에 포함" type="checkbox" /></>}
+        </div>
+        <div className="inline-category-expenses">{group.expenses.map(expense => <ExpenseCard key={expense.id} record={expense} />)}{!group.expenses.length && <p className="inline-category-empty">아직 세부항목이 없어요. 필요한 비용을 하나씩 추가해 보세요.</p>}</div>
+        {!archived && <button type="button" className="inline-add-expense" onClick={() => open('expense.save', { categoryId: c.id })}>+ {c.title} 세부항목 추가</button>}
+      </section>;
+    })}</div>
   </section>;
 }

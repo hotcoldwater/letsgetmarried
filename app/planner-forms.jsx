@@ -1,17 +1,19 @@
 import { useState } from 'react';
+import MoneyInput from './money-input';
 import { checklistTemplates } from '../lib/planning-templates.mjs';
 import { expenseStatus, decisionBranch, decisionPath, preparationTemplates, eventDetailsCount } from '../lib/domain.mjs';
 export const decisionLabels = { todo: '미정', doing: '진행 중', done: '완료' };
 export const expenseLabels = { estimated: '예상', confirmed: '확정', paid: '지급 완료' };
 export function Field({ label, name, value = '', type = 'text', ...props }) {
-  return <label>{label}<input name={name} type={type} defaultValue={value} {...props} /></label>;
+  return <label>{label}{type === 'number' ? <MoneyInput name={name} defaultValue={value} {...props} /> : <input name={name} type={type} defaultValue={value} {...props} />}</label>;
 }
 const Memo = ({ label, name, value = '', maxLength = 5000, ...props }) => <label>{label}<textarea name={name} defaultValue={value} maxLength={maxLength} rows={3} {...props} /></label>;
-function EventFields({ record: r }) {
+function EventFields({ record: r, state }) {
   const [memo, setMemo] = useState(r.memo || ''), [newTasks, setNewTasks] = useState('');
   const count = eventDetailsCount(memo, r.tasks, newTasks);
   return <>
     <Field label="일정 이름" name="title" value={r.title} required maxLength={200} autoFocus placeholder="예: 드레스 피팅" />
+    <label>카테고리<select name="itemId" defaultValue={r.itemId || ''}><option value="">미분류</option>{state.items.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     <div className="simple-fields"><Field label="날짜" name="date" type="date" value={r.date} /><Field label="시간" name="time" type="time" value={r.time} /></div>
     <Field label="장소" name="place" value={r.place} maxLength={300} placeholder="장소는 나중에 정해도 돼요" />
     <details className="simple-more" open><summary>메모와 준비물{count ? ` (${count})` : ''}</summary>
@@ -44,7 +46,7 @@ function TemplateFields({ state }) {
 export default function PlannerFields({ modal, state }) {
   const r = modal.record || {};
   const groups = <><option value="">분류 없음</option>{state.items.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}</>;
-  if (modal.type === 'event.save') return <EventFields record={r} />;
+  if (modal.type === 'event.save') return <EventFields record={r} state={state} />;
   if (modal.type === 'decision.save') return <>
     <Field label="결정할 것" name="title" value={r.title} required maxLength={200} autoFocus placeholder="예: 스튜디오 업체 정하기" />
     <label>상위 결정<select name="parentId" defaultValue={r.parentId || ''}><option value="">없음 · 최상위 결정</option>{state.decisions.filter(d => (!d.archived || d.id === r.parentId) && !decisionBranch(state, r.id).some(child => child.id === d.id)).map(d => <option key={d.id} value={d.id}>{decisionPath(state, d.id).map(p => p.title).join(' / ')}</option>)}</select></label>
@@ -53,11 +55,11 @@ export default function PlannerFields({ modal, state }) {
     <details className="simple-more" open><summary>참고 메모</summary><Memo label="확인할 내용" name="memo" value={r.memo} /></details>
   </>;
   if (modal.type === 'expense.save') return <>
-    <Field label="지출 이름" name="title" value={r.title} required maxLength={200} autoFocus placeholder="예: 예식장 계약" />
-    <div className="simple-fields"><label>상태<select name="status" defaultValue={expenseStatus(r)}>{Object.entries(expenseLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>분류<select name="categoryId" defaultValue={r.categoryId || state.settings.categories[0].id}>{state.settings.categories.map(c => <option key={c.id} value={c.id}>{c.title}{c.included ? '' : ' · 예산 제외'}</option>)}</select></label></div>
-    <div className="simple-fields"><Field label="총금액 (원)" name="amount" type="number" value={r.amount ?? ''} required min="0" max="10000000000" step="1" /><Field label="이미 지급한 금액 (원)" name="paid" type="number" value={r.paid ?? 0} required min="0" max="10000000000" step="1" /></div>
+    <Field label="세부항목 이름" name="title" value={r.title} required maxLength={200} autoFocus placeholder="예: 대관료, 식대, 드레스 추가금" />
+    <div className="simple-fields"><label>상태<select name="status" defaultValue={expenseStatus(r)}>{Object.entries(expenseLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label><label>대분류<select name="categoryId" defaultValue={r.categoryId || state.settings.categories[0].id}>{state.settings.categories.map(c => <option key={c.id} value={c.id}>{c.title}{c.included ? '' : ' · 예산 제외'}</option>)}</select></label></div>
+    <div className="simple-fields simple-money-fields"><Field label="총금액 (원)" name="amount" type="number" value={r.amount ?? ''} required min="0" max="10000000000" step="1" /><Field label="지급한 금액 (원)" name="paid" type="number" value={r.paid ?? 0} required min="0" max="10000000000" step="1" /></div>
     <p className="simple-help">총금액은 계약금과 잔금을 합친 금액이에요. ‘지급 완료’로 저장하면 전액 지급한 것으로 반영해요.</p>
-    <Field label="남은 금액 결제 예정일 · 선택" name="dueDate" type="date" value={r.dueDate} />
+    <Field label="남은 결제금액 예정일 · 선택" name="dueDate" type="date" value={r.dueDate} />
     <details className="simple-more" open><summary>계약 내용과 연결된 결정</summary><Memo label="포함 항목 · 추가금 등" name="detail" value={r.detail} maxLength={2000} /><label>연결할 결정<select name="decisionId" defaultValue={r.source?.decisionId || ''}><option value="">연결하지 않음</option>{state.decisions.filter(d => (!d.archived && d.status === 'done') || d.id === r.source?.decisionId).map(d => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label></details>
   </>;
   if (modal.type === 'budget.save') return <>

@@ -4,11 +4,14 @@ import Brand from './brand';
 import LoginForm from './login-form';
 import PushSettings from './push-settings';
 import PlannerFields from './planner-forms';
-import { PEOPLE, budgetSummary, expenseStatus, decisionBranch, preparationTemplates } from '../lib/domain.mjs';
-import { createWorkspaceQueue, fieldRecord, recordAnchor, searchableText, visibleDecisions } from '../lib/inline-planner.mjs';
+import PlanningCategories from './planning-categories';
+import { ScheduleTable, DecisionTable, PlanningFilters } from './planner-table';
+import { PEOPLE, budgetSummary, decisionBranch, preparationTemplates } from '../lib/domain.mjs';
+import { createWorkspaceQueue, defaultPlannerViews, fieldRecord, recordAnchor, visibleDecisions, visibleEvents, visibleExpenseGroups } from '../lib/inline-planner.mjs';
+import { parseMoneyInput } from '../lib/money-input.mjs';
 import useInlineSaves from './use-inline-saves';
 import { InlineContext, EditableField, QuickAdd } from './inline-fields';
-import { BudgetCategories, DecisionCard, EventCard, ExpenseCard, won } from './inline-records';
+import { BudgetCategories, won } from './inline-records';
 
 const tabs = [['timeline', '일정', 'calendar'], ['decisions', '결정할 것', 'check'], ['budget', '예산', 'wallet']];
 const defaultFilter = view => view === 'budget' ? 'active' : 'all';
@@ -28,7 +31,7 @@ function Icon({ name }) {
   };
   return <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{shapes[name]}</svg>;
 }
-const formTitles = { 'event.save': '일정 추가', 'expense.save': '지출 추가', 'templates.add': '준비 항목 불러오기', 'attachment.add': '참고 링크 추가', upload: '사진 · PDF 추가', settings: '설정' };
+const formTitles = { 'event.save': '일정 추가', 'expense.save': '세부항목 추가', 'templates.add': '준비 항목 불러오기', 'attachment.add': '참고 링크 추가', upload: '사진 · PDF 추가', settings: '설정', categories: '카테고리 관리' };
 async function responseJSON(response) {
   const data = await response.json();
   if (!response.ok) { const error = new Error(data.error || '저장하지 못했어요. 연결을 확인해 주세요.'); error.status = response.status; throw error; }
@@ -42,12 +45,21 @@ export default function Planner() {
   const [error, setError] = useState(''), [message, setMessage] = useState('');
   const [pending, setPending] = useState(0), [modalBusy, setModalBusy] = useState(false);
   const [modal, setModal] = useState(null), [deleteRequest, setDeleteRequest] = useState(null);
-  const [filter, setFilter] = useState('all'), [query, setQuery] = useState(''), [ordering, setOrdering] = useState(false);
+  const [viewOptions, setViewOptions] = useState(defaultPlannerViews), [ordering, setOrdering] = useState(false);
+  const [expandedRows, setExpandedRows] = useState({});
   const [targetId, setTargetId] = useState(''), [, tick] = useState(0);
   const dialog = useRef(null), deleteDialog = useRef(null), modalRef = useRef(null);
-  const scrollPositions = useRef({}), queueRef = useRef(null), refreshId = useRef(0);
+  const scrollPositions = useRef({}), tableScrollPositions = useRef({}), queueRef = useRef(null), refreshId = useRef(0);
   modalRef.current = modal;
   const state = snapshot?.state;
+  const options = viewOptions[view], { filter, query, category, sort } = options;
+  const changeOptions = patch => setViewOptions(previous => ({ ...previous, [view]: { ...previous[view], ...patch } }));
+  const setFilter = filter => changeOptions({ filter }), setQuery = query => changeOptions({ query });
+  const toggleRow = key => {
+    setExpandedRows(previous => ({ ...previous, [key]: !previous[key] }));
+    if (expandedRows[key]) requestAnimationFrame(() => document.getElementById(key)?.querySelector('.planner-expand')?.focus({ preventScroll: true }));
+  };
+  const selectedItem = category === 'all' || category === 'unassigned' ? '' : category;
   const receive = useCallback(data => {
     if (snapshotRef.current && data.version < snapshotRef.current.version) return;
     snapshotRef.current = { ...snapshotRef.current, ...data };
@@ -86,7 +98,7 @@ export default function Planner() {
       const [hash, target] = location.hash.slice(1).split('/');
       const next = hash === 'inbox' ? 'decisions' : tabs.some(([id]) => id === hash) ? hash : 'timeline';
       if (viewRef.current !== next) scrollPositions.current[viewRef.current] = window.scrollY;
-      viewRef.current = next; setView(next); setFilter(defaultFilter(next)); setQuery(''); setOrdering(false);
+      viewRef.current = next; setView(next); setOrdering(false);
       if (target) { try { setTargetId(decodeURIComponent(target)); } catch {} }
       else requestAnimationFrame(() => window.scrollTo(0, scrollPositions.current[next] || 0));
     };
@@ -103,13 +115,25 @@ export default function Planner() {
   useEffect(() => { if (deleteRequest && !deleteDialog.current?.open) deleteDialog.current?.showModal(); else if (!deleteRequest) deleteDialog.current?.close(); }, [deleteRequest]);
   useEffect(() => { if (message) { const timer = setTimeout(() => setMessage(''), 3000); return () => clearTimeout(timer); } }, [message]);
   useEffect(() => {
+    if (!state) return;
+    setViewOptions(previous => {
+      const missing = Object.keys(previous).filter(key => !['all', 'unassigned'].includes(previous[key].category) && !state.items.some(item => item.id === previous[key].category));
+      if (!missing.length) return previous;
+      return Object.fromEntries(Object.entries(previous).map(([key, value]) => [key, missing.includes(key) ? { ...value, category: 'all' } : value]));
+    });
+  }, [state?.items]);
+  useEffect(() => {
     if (!state || !targetId) return;
-    const kind = view === 'timeline' ? 'event' : view !== 'budget' ? 'decision' : targetId === 'settings' ? 'budget' : state.settings.categories.some(c => c.id === targetId) ? 'category' : 'expense';
+    const kind = view !== 'budget' && state.items.some(item => item.id === targetId) ? 'item' : view === 'timeline' ? 'event' : view !== 'budget' ? 'decision' : targetId === 'settings' ? 'budget' : state.settings.categories.some(c => c.id === targetId) ? 'category' : 'expense';
+    if (kind === 'item' && modal?.type !== 'categories') { open('categories'); return; }
     const record = (state[{ event: 'events', expense: 'expenses', decision: 'decisions' }[kind]] || []).find(r => r.id === targetId);
     if (record?.archived && filter !== 'archived') { setFilter('archived'); return; }
+    const visible = kind === 'event' ? visibleEvents(state, query, filter, category, sort).some(r => r.id === targetId) : kind === 'decision' ? visibleDecisions(state, query, filter, category, sort).some(row => row.record.id === targetId && !row.context) : true;
+    if (record && !visible) { changeOptions({ query: '', category: 'all', filter: record.archived ? 'archived' : 'all' }); return; }
+    if (kind === 'event' || kind === 'decision') setExpandedRows(previous => ({ ...previous, [recordAnchor(kind, targetId)]: true }));
     const timer = requestAnimationFrame(() => { jump(kind, targetId); setTargetId(''); });
     return () => cancelAnimationFrame(timer);
-  }, [state, targetId, view, filter, jump]);
+  }, [state, targetId, view, filter, query, category, sort, modal?.type, jump]);
 
   function go(next) {
     saves.flush();
@@ -126,11 +150,11 @@ export default function Planner() {
   }
   async function submit(event) {
     event.preventDefault(); if (modalBusy) return;
-    const f = new FormData(event.currentTarget), get = key => String(f.get(key) ?? ''), number = key => get(key).trim() === '' ? null : Number(get(key));
+    const f = new FormData(event.currentTarget), get = key => String(f.get(key) ?? ''), number = key => parseMoneyInput(get(key));
     setModalBusy(true); setError('');
     try {
       let command;
-      if (modal.type === 'event.save') command = { type: modal.type, payload: { title: get('title'), date: get('date'), time: get('time'), place: get('place'), memo: get('memo'), checklistId: get('checklistId'), newTasks: get('newTasks') } };
+      if (modal.type === 'event.save') command = { type: modal.type, payload: { title: get('title'), itemId: get('itemId'), date: get('date'), time: get('time'), place: get('place'), memo: get('memo'), checklistId: get('checklistId'), newTasks: get('newTasks') } };
       if (modal.type === 'expense.save') command = { type: modal.type, payload: { title: get('title'), status: get('status'), categoryId: get('categoryId'), amount: number('amount'), paid: number('paid'), dueDate: get('dueDate'), detail: get('detail'), decisionId: get('decisionId') } };
       if (modal.type === 'templates.add') command = { type: modal.type, payload: { ids: f.getAll('templates'), templates: preparationTemplates(state).map(t => ({ id: t.id, title: get('template-title-' + t.id), group: get('template-group-' + t.id) })) } };
       if (modal.type === 'attachment.add') command = { type: modal.type, payload: { kind: modal.kind, targetId: modal.record.id, title: get('title'), url: get('url') } };
@@ -144,11 +168,20 @@ export default function Planner() {
           const params = new URLSearchParams({ title: file.name.slice(0, 200), kind: modal.kind, targetId: modal.record.id, version: latest.version });
           return responseJSON(await fetch('/api/attachments?' + params, { method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body }));
         });
-      } else await queue.command(command);
+      } else {
+        const saved = await queue.command(command);
+        if (modal.type === 'expense.save') {
+          setFilter('active'); setQuery('');
+          setTargetId(saved.state.expenses.at(-1).id);
+        }
+        if (modal.type === 'event.save') {
+          changeOptions({ filter: 'all', query: '' });
+          setTargetId(saved.state.events.at(-1).id);
+        }
+      }
       setModal(null); setMessage('저장했어요.');
     } catch (e) { setError(e.message); } finally { setModalBusy(false); }
   }
-  function empty(text) { return <div className="simple-empty"><Icon name={tabs.find(t => t[0] === view)[2]} /><p>{text}</p></div>; }
   function toolbar(options, records, kind) {
     return <div className="inline-toolbar">
       <label className="inline-search"><span className="sr-only">제목과 내용 검색</span><input type="search" value={query} onChange={e => { setQuery(e.target.value); setOrdering(false); }} placeholder="제목·내용 검색" /></label>
@@ -157,42 +190,40 @@ export default function Planner() {
     </div>;
   }
   function timeline() {
-    const events = state.events.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (filter === 'active' ? !e.done : filter === 'done' ? e.done : true) && searchableText(e, state, 'event').includes(query.trim().toLowerCase()));
-    events.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.time || '').localeCompare(b.time || ''));
-    const dated = state.events.filter(e => !e.archived && e.date).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+    const events = visibleEvents(state, query, filter, category, sort);
     return <>
-      <p className="inline-section-intro">날짜와 장소부터 메모, 준비물까지 함께 확인해요.</p>
-      {dated.length > 1 && <section className="simple-journey" aria-label="날짜순 일정 흐름"><div className="simple-rail">{dated.map(e => <button type="button" key={e.id} aria-label={`${e.title}, ${e.date}${e.done ? ', 완료' : ''} 상세로 이동`} onClick={() => { setFilter('all'); setQuery(''); setTargetId(e.id); }}><time dateTime={e.date}>{e.date.slice(5).replace('-', '.')}</time><span aria-hidden="true" className={'simple-dot' + (e.id === 'wedding' ? ' wedding' : '')}>{e.id === 'wedding' ? '♡' : ''}</span><strong>{e.done && '✓ '}{e.title}</strong></button>)}</div></section>}
-      {toolbar([['all', '전체 일정'], ['active', '남은 일정'], ['done', '완료'], ['archived', '보관함']], events, 'event')}
-      <section className="inline-record-list">{events.map((e, i) => <div key={e.id}>{(!i || events[i - 1].date?.slice(0, 7) !== e.date?.slice(0, 7)) && <h2 className="inline-month">{e.date ? `${e.date.slice(0, 4)}년 ${Number(e.date.slice(5, 7))}월` : '날짜 미정'}</h2>}<EventCard record={e} /></div>)}{!events.length && empty(query ? '검색 결과가 없어요.' : '여기에 일정이 표시돼요. 새 일정을 추가해 보세요.')}</section>
+      <PlanningFilters view={view} options={options} change={changeOptions} count={events.length} total={state.events.filter(e => filter === 'archived' ? e.archived : !e.archived).length} />
+      <ScheduleTable records={events} sort={sort} onSort={sort => changeOptions({ sort })} expanded={expandedRows} toggle={toggleRow} scrollMemory={tableScrollPositions} />
     </>;
   }
   function decisions() {
-    const rows = visibleDecisions(state, query, filter), all = state.decisions.filter(d => !d.archived), done = all.filter(d => d.status === 'done').length;
+    const rows = visibleDecisions(state, query, filter, category, sort), all = state.decisions.filter(d => !d.archived), done = all.filter(d => d.status === 'done').length;
     return <>
-      <QuickAdd label="결정할 것 빠르게 추가" placeholder="새로 정할 것을 한 줄로 남겨요" create={title => queue.command({ type: 'decision.save', payload: { title, status: 'todo', parentId: '' } })} />
+      <PlanningFilters view={view} options={options} change={patch => { changeOptions(patch); setOrdering(false); }} count={rows.filter(row => !row.context).length} total={state.decisions.filter(d => filter === 'archived' ? d.archived : !d.archived).length} />
+      <QuickAdd label="결정할 것 빠르게 추가" placeholder={selectedItem ? `${state.items.find(item => item.id === selectedItem)?.title}에 정할 것을 추가해요` : '새로 정할 것을 한 줄로 남겨요'} create={async title => {
+        const saved = await queue.command({ type: 'decision.save', payload: { title, status: 'todo', parentId: '', itemId: selectedItem } });
+        changeOptions({ query: '', filter: 'all' }); setTargetId(saved.state.decisions.at(-1).id);
+      }} />
       <div className="simple-progress-label"><span>{all.length ? `${all.length}개 중 ${done}개 완료` : '하나씩 정해 나가요'}</span><button type="button" className="text-button" onClick={() => open('templates.add')}>준비 항목 불러오기</button></div>
-      {toolbar([['all', '전체 결정'], ['active', '남은 결정'], ['todo', '미정'], ['doing', '진행 중'], ['done', '완료'], ['archived', '보관함']], rows.filter(r => !r.depth).map(r => r.record), 'decision')}
-      <div className="simple-order-toolbar"><span>{ordering ? '같은 단계 안에서 위·아래로 이동해요.' : '하위 항목도 모두 펼쳐져 있어요'}</span><button type="button" className="text-button" aria-pressed={ordering} onClick={() => { setOrdering(v => !v); setFilter('all'); setQuery(''); }}>{ordering ? '순서 편집 마치기' : '순서 편집'}</button></div>
-      <section className="inline-record-list inline-tree">{rows.map(row => <DecisionCard key={row.record.id} {...row} ordering={ordering} />)}{!rows.length && empty(query ? '검색 결과가 없어요.' : '정할 것이 떠오르면 위에서 추가해 보세요.')}</section>
+      <div className="simple-order-toolbar"><span>{ordering ? '같은 단계 안에서 위·아래로 이동해요.' : '하위 결정은 들여쓰기로 구분해요.'}</span><button type="button" className="text-button" aria-pressed={ordering} onClick={() => { setOrdering(v => !v); changeOptions({ filter: 'all', query: '', category: 'all', sort: { key: 'manual', direction: 'asc' } }); }}>{ordering ? '순서 편집 마치기' : '순서 편집'}</button></div>
+      <DecisionTable rows={rows} sort={sort} onSort={sort => { changeOptions({ sort }); setOrdering(false); }} expanded={expandedRows} toggle={toggleRow} ordering={ordering} scrollMemory={tableScrollPositions} />
     </>;
   }
   function budget() {
     const b = budgetSummary(state);
-    const expenses = state.expenses.filter(e => (filter === 'archived' ? e.archived : !e.archived) && (['estimated', 'confirmed', 'paid'].includes(filter) ? expenseStatus(e) === filter : true) && searchableText(e, state, 'expense').includes(query.trim().toLowerCase()));
+    const groups = visibleExpenseGroups(state, query, filter), expenses = groups.flatMap(group => group.expenses);
     const due = state.expenses.filter(e => !e.archived && e.dueDate && e.amount > e.paid && e.dueDate >= today() && e.dueDate <= new Date(Date.parse(today()) + 30 * 86400000).toISOString().slice(0, 10) && state.settings.categories.find(c => c.id === e.categoryId)?.included);
     return <>
       <section id={recordAnchor('budget', 'settings')} tabIndex={-1} className="simple-budget surface">
         <div className="inline-budget-settings"><EditableField kind="budget" field="budget" label="목표 예산 (원)" type="number" required min="0" max="10000000000" step="1" /><EditableField kind="budget" field="scope" label="예산에 포함할 범위" multiline required maxLength={200} /></div>
         <h2>예상 총지출</h2><strong className="simple-total">{won(b.total)}</strong>
-        <div className="simple-budget-balance"><span>목표 {won(b.budget)}</span><strong className={b.remaining < 0 ? 'simple-danger' : ''}>{won(Math.abs(b.remaining))} {b.remaining < 0 ? '초과' : '여유'}</strong></div>
+        <div className="simple-budget-balance"><span>목표 {won(b.budget)}</span><strong className={b.remaining < 0 ? 'simple-danger' : ''}>예산 {b.remaining < 0 ? '초과' : '여유'} {won(Math.abs(b.remaining))}</strong></div>
         <div className="live-track" role="img" aria-label={`지급 완료 ${won(b.paid)}, 확정 미지급 ${won(b.committed)}, 예상 ${won(b.estimated)}, 목표 ${won(b.budget)}`}><div className="live-segment paid" style={{ width: b.paid / b.axis * 100 + '%' }} /><div className="live-segment committed" style={{ width: b.committed / b.axis * 100 + '%' }} /><div className="live-segment estimated" style={{ width: b.estimated / b.axis * 100 + '%' }} /><div className="live-target" style={{ left: b.budget / b.axis * 100 + '%' }}><span>목표</span></div>{b.remaining < 0 && <div className="live-over" style={{ left: b.budget / b.axis * 100 + '%', width: -b.remaining / b.axis * 100 + '%' }} />}</div>
         <div className="simple-budget-legend">{[['paid', '지급 완료', b.paid], ['confirmed', '확정 미지급', b.committed], ['estimated', '예상', b.estimated]].map(([c, label, value]) => <div key={c}><span><i className={c} />{label}</span><strong>{won(value)}</strong></div>)}</div>
         {due.length > 0 && <p className="simple-due">30일 안에 결제 예정 · {due.length}건 / {won(due.reduce((sum, e) => sum + e.amount - e.paid, 0))}</p>}
       </section>
-      <BudgetCategories summary={b} />
-      {toolbar([['active', '전체 지출'], ['estimated', '예상'], ['confirmed', '확정'], ['paid', '지급 완료'], ['archived', '보관함']], expenses, 'expense')}
-      <section className="inline-record-list">{expenses.map(e => <ExpenseCard key={e.id} record={e} />)}{!expenses.length && empty(query ? '검색 결과가 없어요.' : '견적이나 지출을 기록하면 예산을 바로 확인할 수 있어요.')}</section>
+      {toolbar([['active', '전체 항목'], ['estimated', '예상'], ['confirmed', '확정'], ['paid', '지급 완료'], ['archived', '보관함']], expenses, 'expense')}
+      <BudgetCategories summary={b} groups={groups} filtered={!!query.trim() || filter !== 'active'} archived={filter === 'archived'} onCategoryAdded={id => { setFilter('active'); setQuery(''); setTargetId(id); }} />
     </>;
   }
 
@@ -205,16 +236,16 @@ export default function Planner() {
   return <InlineContext.Provider value={{ state, queue, saves, open, remove: request => { setError(''); setDeleteRequest(request); }, storageEnabled: snapshot.storageEnabled }}>
     <div className="simple-app"><a className="skip-link" href="#main" onClick={event => { event.preventDefault(); document.getElementById('main')?.focus(); }}>본문으로 바로가기</a>
       <header className="simple-header"><div><a href="#timeline" className="app-logo" onClick={e => { e.preventDefault(); go('timeline'); }}><Brand /></a><nav className="simple-nav" aria-label="주요 화면">{nav}</nav><button type="button" className="simple-settings" aria-label="설정" onClick={() => open('settings')}><Icon name="settings" /></button></div></header>
-      <main id="main" className="simple-main" tabIndex={-1}>
+      <main id="main" className={`simple-main ${view !== 'budget' ? 'planner-table-main' : ''}`} tabIndex={-1}>
         <div className="simple-context"><span>오성현 &amp; 정지윤 <span>· {wedding?.date ? `${wedding.date.replaceAll('-', '.')} ${wedding.time}` : '결혼식 날짜 미정'}</span></span><strong>{days(wedding?.date)}</strong></div>
-        <div className="simple-heading"><h1>{tabs.find(t => t[0] === view)[1]}</h1>{view !== 'decisions' && <button type="button" className="primary-button" onClick={() => open(view === 'timeline' ? 'event.save' : 'expense.save')}>+ {view === 'timeline' ? '일정 추가' : '지출 추가'}</button>}</div>
+        <div className="simple-heading"><h1>{tabs.find(t => t[0] === view)[1]}</h1>{view !== 'decisions' && <button type="button" className="primary-button" onClick={() => open(view === 'timeline' ? 'event.save' : 'expense.save', view === 'timeline' ? { itemId: selectedItem } : {})}>+ {view === 'timeline' ? '일정 추가' : '세부항목 추가'}</button>}</div>
         <div className="inline-save-overview"><span>입력 후 다른 곳을 누르면 자동 저장돼요.</span><strong role="status" className={failures.length ? 'simple-danger' : ''}>{failures.length ? `저장 실패 ${failures.length}건` : pending ? '저장 중…' : editing ? '입력 중' : '✓ 모든 변경사항 저장됨'}</strong></div>
         {failures.length > 0 && <div className="inline-unsaved" role="alert"><p>저장하지 못한 입력을 보관하고 있어요.</p>{failures.map(([key, draft]) => {
           let missing = false; try { fieldRecord(state, draft.config); } catch { missing = true; }
           if (missing) return <div key={key}><p>{draft.config.label} · 원래 항목이 삭제되었어요. 필요한 내용을 복사해 두세요.</p><textarea readOnly aria-label={`저장되지 않은 ${draft.config.label}`} value={String(draft.value)} /><button type="button" onClick={() => saves.discard(key)}>입력 지우기</button></div>;
           return <button type="button" key={key} onClick={() => {
           const kind = draft.config.kind, next = ['budget', 'category', 'expense'].includes(kind) ? 'budget' : ['event', 'task'].includes(kind) ? 'timeline' : 'decisions';
-          setFilter(defaultFilter(next)); setQuery('');
+          setViewOptions(previous => ({ ...previous, [next]: { ...previous[next], filter: defaultFilter(next), query: '', category: 'all' } }));
           const id = draft.config.ownerId || draft.config.id || 'settings';
           if (next !== view) location.hash = `${next}/${encodeURIComponent(id)}`;
           else setTargetId(id);
@@ -227,8 +258,8 @@ export default function Planner() {
       <nav className="simple-mobile-nav" aria-label="모바일 주요 화면">{nav}</nav>
       {message && <div className="simple-toast" role="status">{message}</div>}
       <dialog className="simple-dialog" ref={dialog} aria-labelledby="simple-dialog-title" onCancel={e => { if (modalBusy) e.preventDefault(); else setModal(null); }} onClose={() => { if (!modalBusy) setModal(null); }}>
-        {modal && <><div className="simple-dialog-head"><h2 id="simple-dialog-title">{formTitles[modal.type]}</h2><button type="button" className="simple-settings" aria-label="닫기" disabled={modalBusy} onClick={() => setModal(null)}><Icon name="close" /></button></div>
-          {modal.type === 'settings' ? <div className="simple-settings-body"><p>{PEOPLE[snapshot.user.role]} 님으로 로그인했어요.</p><div className="simple-actions"><a href="/account" className="secondary-button">비밀번호 변경</a><button type="button" className="primary-button" onClick={logout}>로그아웃</button></div><section className="inline-settings-section"><h3>휴대폰 알림</h3><PushSettings publicKey={snapshot.pushKey} /></section>{state.attachments.length > 0 && <section className="inline-settings-section"><h3>저장된 자료</h3><div className="simple-files">{state.attachments.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.title} ↗</a>)}</div></section>}{error && <p className="simple-error" role="alert">{error}</p>}</div> :
+        {modal && <><div className="simple-dialog-head"><h2 id="simple-dialog-title">{modal.type === 'expense.save' && modal.record.categoryId ? `${state.settings.categories.find(c => c.id === modal.record.categoryId)?.title} 세부항목 추가` : formTitles[modal.type]}</h2><button type="button" className="simple-settings" aria-label="닫기" disabled={modalBusy} onClick={() => setModal(null)}><Icon name="close" /></button></div>
+          {modal.type === 'settings' ? <div className="simple-settings-body"><p>{PEOPLE[snapshot.user.role]} 님으로 로그인했어요.</p><div className="simple-actions"><a href="/account" className="secondary-button">비밀번호 변경</a><button type="button" className="primary-button" onClick={logout}>로그아웃</button></div><section className="inline-settings-section"><h3>휴대폰 알림</h3><PushSettings publicKey={snapshot.pushKey} /></section>{state.attachments.length > 0 && <section className="inline-settings-section"><h3>저장된 자료</h3><div className="simple-files">{state.attachments.map(a => <a key={a.id} href={a.url || '/api/attachments/' + a.id} target="_blank" rel="noopener noreferrer">{a.title} ↗</a>)}</div></section>}{error && <p className="simple-error" role="alert">{error}</p>}</div> : modal.type === 'categories' ? <PlanningCategories /> :
             <form className="live-form simple-form" key={modal.type + (modal.record.id || '')} onSubmit={submit}><fieldset disabled={modalBusy}><PlannerFields modal={modal} state={state} /></fieldset>{error && <p className="simple-error" role="alert">{error}</p>}<button type="submit" className="primary-button simple-save" disabled={modalBusy}>{modalBusy ? '저장 중…' : modal.type === 'templates.add' ? '선택·수정 내용 저장' : '추가'}</button></form>}
         </>}
       </dialog>
